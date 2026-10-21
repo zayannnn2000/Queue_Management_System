@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { BookedRow, Customer, WaitingRow } from "@/lib/queue";
+import type { BookedRow, Customer, PriorityReason, WaitingRow } from "@/lib/queue";
+import { PRIORITY_REASONS } from "@/lib/queue";
 import { EditDialog } from "./edit-dialog";
 import { clock, minutes, serviceName } from "./format";
 import { useQueue } from "./queue-provider";
@@ -17,6 +18,7 @@ export function QueueLists() {
   const { state } = useQueue();
   const { view } = state;
   const [filter, setFilter] = useState<Filter>("waiting");
+  const [service, setService] = useState<string>("all");
   const [editing, setEditing] = useState<Customer | null>(null);
 
   const cards: { id: Filter; label: string; count: number }[] = [
@@ -24,6 +26,8 @@ export function QueueLists() {
     { id: "booked", label: "Booked, not arrived", count: view.booked.length },
     { id: "done", label: "Finished today", count: view.done.length },
   ];
+  const list: Customer[] = filter === "waiting" ? view.waiting : filter === "booked" ? view.booked : view.done;
+  const inService = <T extends Customer>(rows: T[]) => (service === "all" ? rows : rows.filter((r) => r.service === service));
 
   return (
     <section aria-labelledby="lists-heading" className="rounded-lg border border-border bg-surface">
@@ -53,13 +57,35 @@ export function QueueLists() {
         })}
       </div>
 
+      <div role="group" aria-label="Filter by service" className="flex gap-1.5 overflow-x-auto px-3 pb-3">
+        {[{ id: "all", name: "All services", letter: "" }, ...view.settings.services].map((s) => {
+          const selected = service === s.id;
+          const count = s.id === "all" ? list.length : list.filter((r) => r.service === s.id).length;
+          return (
+            <button
+              key={s.id}
+              type="button"
+              aria-pressed={selected}
+              aria-controls="patient-list"
+              onClick={() => setService(s.id)}
+              className={`h-8 flex-none rounded-full px-3 text-xs whitespace-nowrap transition-colors ${
+                selected ? "bg-primary font-semibold text-white" : "bg-raised text-muted hover:bg-active hover:text-ink"
+              }`}
+            >
+              {s.letter ? <span className="mr-1 font-token">{s.letter}</span> : null}
+              {s.name} <span className="num opacity-80">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <div id="patient-list" aria-label={cards.find((c) => c.id === filter)!.label} role="region" className="relative overflow-x-auto">
         {filter === "waiting" ? (
-          <WaitingTable rows={view.waiting} onEdit={setEditing} />
+          <WaitingTable rows={inService(view.waiting)} onEdit={setEditing} />
         ) : filter === "booked" ? (
-          <BookedTable rows={view.booked} onEdit={setEditing} />
+          <BookedTable rows={inService(view.booked)} onEdit={setEditing} />
         ) : (
-          <DoneTable rows={view.done} />
+          <DoneTable rows={inService(view.done)} />
         )}
       </div>
 
@@ -96,15 +122,44 @@ function TypeCell({ row }: { row: Customer & { targetAt?: number } }) {
   return <Pill.Accent>Appt {clock(row.scheduledAt!, settings)}</Pill.Accent>;
 }
 
+/** Staff priority: a compact menu on each waiting row (set a reason, or remove it). */
+function PriorityMenu({ row }: { row: WaitingRow }) {
+  const { actions, meta } = useQueue();
+  return (
+    <select
+      aria-label={`Priority for ${row.token}`}
+      disabled={meta.pending}
+      value=""
+      onChange={(e) => {
+        const value = e.target.value;
+        if (!value) return;
+        actions.run({ type: "setPriority", id: row.id, reason: value === "none" ? null : (value as PriorityReason) });
+      }}
+      className="h-8 rounded-full border border-control bg-surface pl-3 text-[13px] font-semibold text-ink"
+    >
+      <option value="">{row.priority ? "Priority ✓" : "Priority"}</option>
+      {row.priority ? <option value="none">Remove priority</option> : null}
+      {PRIORITY_REASONS.map((r) => (
+        <option key={r} value={r}>
+          {r}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function WaitingTable({ rows, onEdit }: { rows: WaitingRow[]; onEdit: (c: Customer) => void }) {
   const { state, actions, meta } = useQueue();
   const { view } = state;
   const { settings } = view;
+  const freeRoom = (serviceId: string) => view.rooms.find((r) => r.serviceId === serviceId && !r.current);
   return (
-    <table className="w-full min-w-[640px] border-collapse text-sm">
+    <table className="w-full min-w-[860px] border-collapse text-sm">
       <thead>
         <tr className="border-b border-border">
-          <th className={`${th} w-12 text-right`}>Pos.</th>
+          <th className={`${th} w-12 text-right`}>
+            <span title="Place in this service's queue">Pos.</span>
+          </th>
           <th className={th}>Token</th>
           <th className={th}>Patient</th>
           <th className={th}>Booking</th>
@@ -129,11 +184,24 @@ function WaitingTable({ rows, onEdit }: { rows: WaitingRow[]; onEdit: (c: Custom
               </td>
               <PatientCell name={row.name} service={serviceName(settings, row.service)} />
               <td className={td}>
-                <TypeCell row={row} />
+                <span className="inline-flex gap-1.5">
+                  <TypeCell row={row} />
+                  {row.priority ? <Pill.Negative>Priority · {row.priority.reason}</Pill.Negative> : null}
+                </span>
               </td>
               <td className={`${td} num text-right text-muted`}>{clock(row.targetAt, settings)}</td>
               <td className={`${td} num text-right font-medium`}>{row.waitLabel}</td>
               <td className={`${td} text-right whitespace-nowrap`}>
+                {freeRoom(row.service) ? (
+                  <SecondaryButton
+                    className="mr-1 h-8"
+                    disabled={meta.pending}
+                    onClick={() => actions.run({ type: "callPatient", room: freeRoom(row.service)!.id, id: row.id })}
+                  >
+                    Call now<span className="sr-only"> {row.token}</span>
+                  </SecondaryButton>
+                ) : null}
+                <PriorityMenu row={row} />
                 <TextButton onClick={() => actions.print(row.token)}>
                   Print<span className="sr-only"> token {row.token}</span>
                 </TextButton>

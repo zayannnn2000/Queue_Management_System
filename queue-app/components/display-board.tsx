@@ -2,15 +2,15 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { PublicRow, PublicView } from "@/lib/queue";
+import type { PublicRow, PublicService, PublicView } from "@/lib/queue";
 import { DEFAULT_SETTINGS } from "@/lib/queue";
 import { formatClock } from "@/lib/time";
 import { HygieiaMark } from "./brand";
 import { POLL_MS } from "./queue-provider";
 
-const MAX_ROWS = 10;
+const ROWS_PER_PANEL = 5;
 
-/** Public waiting-room board: token and initial only. Polls the public view every 3 s. */
+/** Public waiting-room board: one panel per service queue, token and initial only. Polls every 3 s. */
 export function DisplayBoard({ initial, highlight }: { initial: PublicView; highlight: string | null }) {
   const [view, setView] = useState(initial);
   const [stale, setStale] = useState(false);
@@ -36,14 +36,8 @@ export function DisplayBoard({ initial, highlight }: { initial: PublicView; high
     };
   }, []);
 
-  const mine = highlight ? view.waiting.find((w) => w.token === highlight) : undefined;
-  const mineServing = highlight ? view.counters.find((c) => c.token === highlight) : undefined;
-  const shown = view.waiting.slice(0, MAX_ROWS);
-  const hidden = view.waiting.length - shown.length;
-  const mineHidden = mine && !shown.includes(mine);
-
   return (
-    <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col px-4 py-6 md:px-10 md:py-8">
+    <div className="mx-auto flex min-h-screen max-w-[1920px] flex-col px-4 py-6 md:px-10 md:py-8">
       <header className="flex flex-wrap items-center gap-x-6 gap-y-2">
         <h1 className="flex items-center gap-4">
           <HygieiaMark size={60} />
@@ -60,114 +54,134 @@ export function DisplayBoard({ initial, highlight }: { initial: PublicView; high
         </p>
       </header>
 
-      {highlight ? (
-        <YourStatus token={highlight} row={mine} servingAt={mineServing?.counter ?? null} />
-      ) : null}
+      {highlight ? <YourStatus token={highlight} view={view} /> : null}
 
-      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-        <section aria-labelledby="serving-heading" className="rounded-2xl bg-ink p-6 text-white md:p-9">
-          <h2 id="serving-heading" className="font-display text-3xl font-semibold text-accent-soft md:text-4xl">
-            Now serving
-          </h2>
-          <ul className="mt-6 flex flex-col gap-6" aria-live="polite">
-            {view.counters.map((c) => (
-              <li key={c.counter} className="flex items-baseline justify-between gap-4">
-                <span className="text-xl whitespace-nowrap text-white/80 md:text-2xl">Counter {c.counter}</span>
-                {c.token ? (
-                  <span translate="no" className="font-display text-6xl font-semibold whitespace-nowrap sm:text-7xl xl:text-[112px] xl:leading-none">
-                    {c.token}
-                    <span className="ml-3 font-sans text-3xl text-accent-soft md:text-4xl">{c.initial}</span>
-                  </span>
-                ) : (
-                  <span className="text-3xl text-white/70 md:text-4xl">Free</span>
-                )}
-              </li>
-            ))}
-          </ul>
-          {view.waiting.length > 0 ? (
-            <div className="mt-8 border-t border-white/15 pt-6">
-              <h3 className="text-lg font-semibold text-accent-soft md:text-xl">Please get ready</h3>
-              <p translate="no" className="mt-2 flex flex-wrap gap-x-8 gap-y-1 font-display text-4xl font-semibold md:text-5xl">
-                {view.waiting.slice(0, 2).map((w) => (
-                  <span key={w.token}>{w.token}</span>
-                ))}
-              </p>
+      {/* Rows of three panels on wide screens, the last row widened so the board has no gaps. */}
+      <div className="mt-6 grid items-start gap-5 sm:grid-cols-2 lg:grid-cols-6">
+        {view.services.map((s, i, all) => {
+          const rest = all.length % 3;
+          const span = i < all.length - rest ? "lg:col-span-2" : rest === 1 ? "lg:col-span-6" : "lg:col-span-3";
+          const tablet = all.length % 2 === 1 && i === all.length - 1 ? "sm:col-span-2" : "";
+          return (
+            <div key={s.id} className={`${span} ${tablet}`}>
+              <ServicePanel service={s} highlight={highlight} />
             </div>
-          ) : null}
-        </section>
-
-        <section aria-labelledby="waiting-heading" className="rounded-2xl border border-border bg-surface p-6 md:p-8">
-          <div className="flex items-baseline gap-4">
-            <h2 id="waiting-heading" className="font-display text-3xl font-semibold md:text-4xl">
-              Waiting
-            </h2>
-            <p className="num text-lg text-muted">{view.waiting.length} in line</p>
-          </div>
-          {view.waiting.length === 0 ? (
-            <p className="mt-6 text-2xl text-muted">Nobody is waiting. Please check in at the front desk.</p>
-          ) : (
-            <table className="mt-4 w-full border-collapse">
-              <thead>
-                <tr className="text-left text-base text-muted md:text-lg">
-                  <th className="h-10 w-12 pr-3 text-right font-normal sm:w-20 sm:pr-4">Place</th>
-                  <th className="h-10 font-normal">Token</th>
-                  <th className="h-10 text-right font-normal whitespace-nowrap">
-                    <span className="max-sm:hidden">Estimated wait</span>
-                    <span className="sm:hidden">Wait</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((row) => (
-                  <Row key={row.token} row={row} mine={row.token === highlight} />
-                ))}
-              </tbody>
-            </table>
-          )}
-          {hidden > 0 ? (
-            <p className="num mt-3 text-lg text-muted">
-              and {hidden} more{mineHidden ? `, including you at place ${mine.position}` : ""}
-            </p>
-          ) : null}
-        </section>
+          );
+        })}
       </div>
 
-      <footer className="mt-auto flex pt-6 flex-wrap items-center gap-x-6 gap-y-3 text-base text-muted">
-        <p>Times are estimates from recent visit lengths. Appointments are seen at their booked time.</p>
+      <footer className="mt-auto flex flex-wrap items-center gap-x-6 gap-y-3 pt-6 text-base text-muted">
+        <p>Each service has its own queue. Times are estimates; appointments are seen at their booked time.</p>
         <FindToken current={highlight} />
       </footer>
     </div>
   );
 }
 
+function ServicePanel({ service, highlight }: { service: PublicService; highlight: string | null }) {
+  const shown = service.waiting.slice(0, ROWS_PER_PANEL);
+  const hidden = service.waiting.length - shown.length;
+  const mine = highlight ? service.waiting.find((w) => w.token === highlight) : undefined;
+  return (
+    <section aria-labelledby={`svc-${service.id}`} className="flex flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+      <header className="flex items-baseline justify-between gap-3 px-5 pt-5">
+        <h2 id={`svc-${service.id}`} className="font-display text-2xl leading-7 font-semibold">
+          {service.name}
+        </h2>
+        <span className="num text-sm whitespace-nowrap text-muted">{service.waiting.length} waiting</span>
+      </header>
+
+      <div className="mx-3 mt-3 rounded-xl bg-ink px-4 py-4 text-white" aria-live="polite">
+        <p className="text-sm font-semibold text-accent-soft">Now serving</p>
+        <ul className="mt-1 flex flex-col gap-1">
+          {service.rooms.map((r) => (
+            <li key={r.id} className="flex items-baseline justify-between gap-3">
+              {r.token ? (
+                <span translate="no" className="font-display text-5xl leading-[52px] font-semibold whitespace-nowrap">
+                  {r.token}
+                  <span className="ml-2 font-sans text-xl text-accent-soft">{r.initial}</span>
+                </span>
+              ) : (
+                <span className="text-2xl leading-[52px] text-white/70">Free</span>
+              )}
+              <span className="text-sm whitespace-nowrap text-white/80">{r.label}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="px-5 pt-3 pb-5">
+        {service.waiting.length === 0 ? (
+          <p className="py-2 text-base text-muted">Nobody waiting.</p>
+        ) : (
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="text-left text-sm text-muted">
+                <th className="h-8 w-8 pr-2 text-right font-normal">#</th>
+                <th className="h-8 font-normal">Token</th>
+                <th className="h-8 text-right font-normal">Wait</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((row) => (
+                <Row key={row.token} row={row} mine={row.token === highlight} />
+              ))}
+            </tbody>
+          </table>
+        )}
+        {hidden > 0 ? (
+          <p className="num mt-2 text-sm text-muted">
+            and {hidden} more{mine && !shown.includes(mine) ? `, including you at place ${mine.position}` : ""}
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function Row({ row, mine }: { row: PublicRow; mine: boolean }) {
   return (
     <tr
-      className={`border-t border-rule text-xl whitespace-nowrap sm:text-2xl md:text-3xl ${mine ? "bg-accent-pale" : ""}`}
+      className={`border-t border-rule text-xl whitespace-nowrap ${mine ? "bg-accent-pale" : ""}`}
       aria-current={mine ? "true" : undefined}
     >
-      <td className="num h-16 pr-3 text-right text-muted sm:pr-4">{row.position}</td>
-      <td className="h-16">
-        <span translate="no" className={`font-token ${mine ? "text-accent" : ""}`}>{row.token}</span>
-        <span className="ml-3 text-muted">{row.initial}</span>
-        {mine ? <span className="ml-2 text-base font-medium text-accent sm:ml-3 sm:text-lg">You</span> : null}
+      <td className="num h-11 pr-2 text-right text-muted">{row.position}</td>
+      <td className="h-11">
+        <span translate="no" className={`font-token ${mine ? "text-accent" : ""}`}>
+          {row.token}
+        </span>
+        <span className="ml-2 text-muted">{row.initial}</span>
+        {mine ? <span className="ml-2 text-sm font-medium text-accent">You</span> : null}
       </td>
-      <td className="num h-16 text-right font-medium">{row.waitLabel}</td>
+      <td className="num h-11 text-right font-medium">{row.waitLabel}</td>
     </tr>
   );
 }
 
-function YourStatus({ token, row, servingAt }: { token: string; row?: PublicRow; servingAt: number | null }) {
-  let text: string;
-  if (servingAt !== null) text = `It's your turn. Please go to counter ${servingAt}.`;
-  else if (row) text = `You are number ${row.position} in line. ${row.waitLabel === "Due now" ? "You're due now." : `Estimated wait ${row.waitLabel.replace("~", "about ")}.`}`;
-  else text = "This token isn't waiting right now. If you have an appointment, please check in at the front desk.";
+function YourStatus({ token, view }: { token: string; view: PublicView }) {
+  let text = "This token isn't waiting right now. If you have an appointment, please check in at the front desk.";
+  for (const s of view.services) {
+    const room = s.rooms.find((r) => r.token === token);
+    if (room) {
+      text = `It's your turn. Please go to ${s.name} · ${room.label}.`;
+      break;
+    }
+    const row = s.waiting.find((w) => w.token === token);
+    if (row) {
+      text = `You are number ${row.position} in the ${s.name} queue. ${
+        row.waitLabel === "Due now" ? "You're due now." : `Estimated wait ${row.waitLabel.replace("~", "about ")}.`
+      }`;
+      break;
+    }
+  }
   return (
     <section
       aria-live="polite"
       className="mt-6 flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-2xl bg-accent-pale px-6 py-4 text-accent"
     >
-      <h2 translate="no" className="font-display text-4xl font-semibold">{token}</h2>
+      <h2 translate="no" className="font-display text-4xl font-semibold">
+        {token}
+      </h2>
       <p className="text-xl text-ink md:text-2xl">{text}</p>
     </section>
   );
@@ -192,7 +206,7 @@ function FindToken({ current }: { current: string | null }) {
         id="find-token"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder="W-004…"
+        placeholder="CW-004…"
         autoComplete="off"
         spellCheck={false}
         className="h-10 w-32 rounded-full border border-control bg-surface px-4 font-token text-base text-ink uppercase"

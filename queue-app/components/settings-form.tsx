@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MAX_COUNTERS } from "@/lib/queue";
+import { MAX_ROOMS } from "@/lib/queue";
 import { useQueue } from "./queue-provider";
 import { DangerTextButton, Field, PrimaryButton, SecondaryButton, inputClass } from "./ui";
 
@@ -54,15 +54,18 @@ function SettingsRow({
 function QueueSettings() {
   const { state, actions, meta } = useQueue();
   const { settings, warnings } = state.view;
-  const [counters, setCounters] = useState(settings.counters);
   const [grace, setGrace] = useState(settings.graceMinutes);
+  const [protection, setProtection] = useState(settings.protectionMinutes);
   const [durations, setDurations] = useState<Record<string, number>>(() =>
     Object.fromEntries(settings.services.map((s) => [s.id, s.defaultMinutes])),
+  );
+  const [rooms, setRooms] = useState<Record<string, number>>(() =>
+    Object.fromEntries(settings.services.map((s) => [s.id, s.rooms])),
   );
 
   const save = (e: React.FormEvent) => {
     e.preventDefault();
-    actions.run({ type: "updateSettings", counters, graceMinutes: grace, durations });
+    actions.run({ type: "updateSettings", graceMinutes: grace, protectionMinutes: protection, durations, rooms });
   };
 
   return (
@@ -74,25 +77,29 @@ function QueueSettings() {
             Service times are the starting estimate. Once patients are served, the wait uses the average of the last 5
             real visits instead.
           </p>
-          <p className="mt-2">Reducing counters never cancels bookings; any overlap is listed here.</p>
+          <p className="mt-2">
+            Each service has its own queue and room(s). Reducing rooms never cancels bookings; any overlap is listed here.
+          </p>
         </>
       }
     >
       <form onSubmit={save} className="flex flex-col gap-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Counters open" htmlFor="set-counters">
-            <select
-              id="set-counters"
-              className={inputClass}
-              value={counters}
-              onChange={(e) => setCounters(Number(e.target.value))}
-            >
-              {Array.from({ length: MAX_COUNTERS }, (_, i) => i + 1).map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
+          <Field
+            label="Walk-in protection (minutes)"
+            htmlFor="set-protection"
+            hint="A walk-in who has waited this long isn't pushed back by appointments. 0 turns it off."
+          >
+            <input
+              id="set-protection"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={240}
+              className={`${inputClass} num`}
+              value={protection}
+              onChange={(e) => setProtection(Number(e.target.value))}
+            />
           </Field>
           <Field label="Grace period (minutes)" htmlFor="set-grace" hint="Later than this, an appointment joins as a walk-in.">
             <input
@@ -108,14 +115,20 @@ function QueueSettings() {
           </Field>
         </div>
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-2 text-sm font-medium">Default service time (minutes)</legend>
+          <legend className="mb-2 text-sm font-medium">Services: default visit length and rooms</legend>
+          <div className="flex items-center gap-3 text-xs text-muted" aria-hidden="true">
+            <span className="flex-1">Service (token letter)</span>
+            <span className="w-24 text-right">Minutes</span>
+            <span className="w-20 text-right">Rooms</span>
+          </div>
           {settings.services.map((s) => (
             <div key={s.id} className="flex items-center gap-3">
-              <label htmlFor={`dur-${s.id}`} className="flex-1 text-sm">
-                {s.name}
-              </label>
+              <span className="flex-1 text-sm">
+                {s.name} <span className="font-token text-muted">({s.letter})</span>
+              </span>
               <input
                 id={`dur-${s.id}`}
+                aria-label={`${s.name} visit length in minutes`}
                 type="number"
                 inputMode="numeric"
                 min={1}
@@ -124,12 +137,23 @@ function QueueSettings() {
                 value={durations[s.id]}
                 onChange={(e) => setDurations((d) => ({ ...d, [s.id]: Number(e.target.value) }))}
               />
+              <input
+                id={`rooms-${s.id}`}
+                aria-label={`${s.name} rooms`}
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={MAX_ROOMS}
+                className={`${inputClass} num w-20 text-right`}
+                value={rooms[s.id]}
+                onChange={(e) => setRooms((r) => ({ ...r, [s.id]: Number(e.target.value) }))}
+              />
             </div>
           ))}
         </fieldset>
         {warnings.length > 0 ? (
           <div className="rounded-md border border-[#fde68a] bg-warn-bg px-3 py-2 text-sm text-warn-ink">
-            <p className="font-medium">More overlapping bookings than counters:</p>
+            <p className="font-medium">More overlapping bookings than rooms:</p>
             <ul className="mt-1 list-disc pl-5">
               {warnings.map((w) => (
                 <li key={w}>{w}</li>

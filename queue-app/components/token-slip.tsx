@@ -18,11 +18,13 @@ export function PrintSlip() {
   const { view, printing } = state;
   if (!printing) return null;
   const row = view.waiting.find((w) => w.token === printing);
-  const customer = row ?? [...view.booked, ...view.done, ...view.counters.flatMap((c) => (c.current ? [c.current] : []))].find(
+  const customer = row ?? [...view.booked, ...view.done, ...view.rooms.flatMap((r) => (r.current ? [r.current] : []))].find(
     (c) => c.token === printing,
   );
   if (!customer) return null;
   const { settings } = view;
+  const rooms = settings.services.find((s) => s.id === customer.service)?.rooms ?? 1;
+  const room = rooms === 1 ? "Room 1" : "Next free room";
   const booking =
     customer.type === "walk_in"
       ? "Walk-in"
@@ -53,9 +55,11 @@ export function PrintSlip() {
         <dd style={{ textAlign: "right", fontWeight: 600 }}>{booking}</dd>
         <dt>Service</dt>
         <dd style={{ textAlign: "right", fontWeight: 600 }}>{serviceName(settings, customer.service)}</dd>
+        <dt>Room</dt>
+        <dd style={{ textAlign: "right", fontWeight: 600 }}>{room}</dd>
         {row ? (
           <>
-            <dt>Place in line</dt>
+            <dt>Place in queue</dt>
             <dd style={{ textAlign: "right", fontWeight: 600 }}>{row.position}</dd>
             <dt>Estimated wait</dt>
             <dd style={{ textAlign: "right", fontWeight: 600 }}>{row.waitLabel}</dd>

@@ -14,7 +14,7 @@ export function EditDialog({ customer, onClose }: { customer: Customer; onClose:
   const { view } = state;
   const ref = useRef<HTMLDialogElement>(null);
   const [name, setName] = useState(customer.name);
-  const [service, setService] = useState(customer.service);
+  const service = customer.service;
   const [scheduledAt, setScheduledAt] = useState(customer.scheduledAt ?? 0);
   const [error, setError] = useState<string | null>(null);
   const isAppointment = customer.type === "appointment";
@@ -37,7 +37,6 @@ export function EditDialog({ customer, onClose }: { customer: Customer; onClose:
       type: "edit",
       id: customer.id,
       name,
-      service,
       ...(isAppointment ? { scheduledAt } : {}),
     });
     if (res.ok) ref.current?.close();
@@ -66,15 +65,13 @@ export function EditDialog({ customer, onClose }: { customer: Customer; onClose:
             onChange={(e) => setName(e.target.value)}
           />
         </Field>
-        <Field label="Service" htmlFor="edit-service">
-          <select id="edit-service" className={inputClass} value={service} onChange={(e) => setService(e.target.value)}>
-            {view.settings.services.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-medium">Service</p>
+          <p className="text-sm">{view.settings.services.find((s) => s.id === service)?.name}</p>
+          <p className="text-xs text-muted">
+            Each service has its own queue and token. To change service, cancel and add them again.
+          </p>
+        </div>
         {isAppointment ? (
           <Field
             label="Appointment time"

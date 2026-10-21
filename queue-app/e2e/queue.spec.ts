@@ -11,69 +11,101 @@ test.beforeEach(async ({ page }) => {
   expect(res.ok()).toBeTruthy();
 });
 
-const counter = (page: Page) => page.getByRole("article", { name: "Counter 1" });
+const room = (page: Page, name = "General consultation · Room 1") => page.getByRole("article", { name });
+const waitingList = (page: Page) => page.getByRole("region", { name: "Waiting" });
 
-async function addWalkIn(page: Page, name: string) {
+async function addWalkIn(page: Page, name: string, service = "consultation") {
   await page.getByRole("button", { name: "Walk-in", exact: true }).click();
   await page.getByLabel("Patient name").fill(name);
+  await page.getByLabel("Service", { exact: true }).selectOption(service);
   await page.getByRole("button", { name: "Add walk-in" }).click();
   await expect(page.getByRole("status").getByText(`added for ${name}`)).toBeVisible();
 }
 
-test("full staff flow: add, book, check in, call next, serve, no-show", async ({ page }) => {
+/** A slot at least 20 minutes ahead, so the appointment isn't due during the test. */
+async function laterSlot(page: Page): Promise<number> {
+  await page.getByRole("button", { name: "Appointment", exact: true }).click();
+  const values = await page.getByLabel("Time today").locator("option:not([disabled])").evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
+  return Number(values[Math.min(4, values.length - 1)]);
+}
+
+test("full staff flow in one service: add, book, check in, call next, serve, no-show", async ({ page }) => {
   page.on("dialog", (d) => d.accept());
   await page.goto("/staff");
   await expect(page.getByRole("heading", { level: 1, name: "Front desk" })).toBeVisible();
 
-  // Add a walk-in: W-001 is issued and joins the waiting list at position 1.
+  // A consultation walk-in gets CW-001 and joins the Consultation queue at position 1.
   await addWalkIn(page, "Tarek Mahmud");
   await expect(page.getByText("In the queue. Give the patient this token.")).toBeVisible();
-  await expect(page.getByRole("region", { name: "Waiting" }).getByRole("cell", { name: "W-001", exact: true })).toBeVisible();
+  await expect(waitingList(page).getByRole("cell", { name: "CW-001", exact: true })).toBeVisible();
 
-  // Book an appointment for the first free slot: A-001, not queued yet.
-  await page.getByRole("button", { name: "Appointment", exact: true }).click();
+  // Book a consultation appointment 20+ minutes ahead: CA-001, not queued yet.
+  const slot = await laterSlot(page);
   await page.getByLabel("Patient name").fill("Sumaiya Karim");
+  await page.getByLabel("Time today").selectOption(String(slot));
   await page.getByRole("button", { name: "Book appointment" }).click();
-  await expect(page.getByRole("status").getByText(/A-001 booked/)).toBeVisible();
+  await expect(page.getByRole("status").getByText(/CA-001 booked/)).toBeVisible();
 
-  // Check in from the booked list.
+  // Check in from the booked list; the booking note goes.
   await page.getByRole("button", { name: /Booked, not arrived/ }).click();
-  await expect(page.getByText("Appointment booked. Quote this token to the patient.")).toBeVisible();
-  await page.getByRole("button", { name: "Check in A-001" }).click();
-  await expect(page.getByRole("status").getByText(/A-001 checked in/)).toBeVisible();
-  // The booking note goes once they've checked in.
+  await page.getByRole("button", { name: "Check in CA-001" }).click();
+  await expect(page.getByRole("status").getByText(/CA-001 checked in/)).toBeVisible();
   await expect(page.getByText("Appointment booked. Quote this token to the patient.")).toHaveCount(0);
 
-  // Call next: the walk-in is due now; the appointment's slot is still ahead.
-  await page.getByRole("button", { name: /Waiting/ }).click();
-  await counter(page).getByRole("button", { name: "Call next" }).click();
-  await expect(counter(page).getByText("W-001", { exact: true })).toBeVisible();
-  await expect(counter(page).getByText(/earliest due target/)).toBeVisible();
+  // Call next: the walk-in is due; the appointment's time hasn't come yet.
+  await page.getByRole("button", { name: /^Waiting/ }).click();
+  await room(page).getByRole("button", { name: "Call next" }).click();
+  await expect(room(page).getByText("CW-001", { exact: true })).toBeVisible();
+  await expect(room(page).getByText(/the earliest due/)).toBeVisible();
 
   // Served & call next: nobody else is due, so the early appointment is called (idle-fill).
-  await counter(page).getByRole("button", { name: "Served & call next" }).click();
-  await expect(counter(page).getByText("A-001", { exact: true })).toBeVisible();
-  await expect(counter(page).getByText(/called early/)).toBeVisible();
+  await room(page).getByRole("button", { name: "Served & call next" }).click();
+  await expect(room(page).getByText("CA-001", { exact: true })).toBeVisible();
+  await expect(room(page).getByText(/called early/)).toBeVisible();
 
-  // A new walk-in arrives; the appointment doesn't come to the counter: no-show.
+  // A new walk-in arrives; the appointment doesn't come in: no-show.
   await addWalkIn(page, "Rakib Hasan");
-  await counter(page).getByRole("button", { name: "No-show" }).click();
-  await expect(counter(page).getByText(/Next up:/)).toContainText("W-002");
+  await room(page).getByRole("button", { name: "No-show" }).click();
+  await expect(room(page).getByText(/Next up:/)).toContainText("CW-002");
 
-  // Call and serve W-002.
-  await counter(page).getByRole("button", { name: "Call next" }).click();
-  await expect(counter(page).getByText("W-002", { exact: true })).toBeVisible();
-  // Last patient: nobody to call next, so only Served and No-show remain.
-  await expect(counter(page).getByRole("button", { name: "Served & call next" })).toHaveCount(0);
-  await expect(counter(page).getByRole("button", { name: "No-show" })).toBeVisible();
-  await counter(page).getByRole("button", { name: "Served", exact: true }).click();
-  await expect(counter(page).getByText(/Nobody is checked in/)).toBeVisible();
+  // Call and serve the last patient: only Served and No-show are offered.
+  await room(page).getByRole("button", { name: "Call next" }).click();
+  await expect(room(page).getByText("CW-002", { exact: true })).toBeVisible();
+  await expect(room(page).getByRole("button", { name: "Served & call next" })).toHaveCount(0);
+  await room(page).getByRole("button", { name: "Served", exact: true }).click();
+  await expect(room(page).getByText("Nobody waiting for this service.")).toBeVisible();
 
-  // Finished list: two served, one no-show.
   await page.getByRole("button", { name: /Finished today/ }).click();
   const finished = page.getByRole("region", { name: "Finished today" });
   await expect(finished.getByText("Served", { exact: true })).toHaveCount(2);
   await expect(finished.getByText("No-show", { exact: true })).toHaveCount(1);
+});
+
+test("separate queues per service, staff priority and call now", async ({ page }) => {
+  await page.goto("/staff");
+  await addWalkIn(page, "Ayesha Rahman");
+  await addWalkIn(page, "Bilal Hossain");
+  await addWalkIn(page, "Chandra Das");
+  await addWalkIn(page, "Eva Biswas", "blood_test");
+  await expect(waitingList(page).getByRole("cell", { name: "BW-001", exact: true })).toBeVisible();
+
+  // Flag CW-003 as priority: they're next in Consultation, with the reason shown.
+  await waitingList(page).getByLabel("Priority for CW-003").selectOption("Elderly");
+  await expect(waitingList(page).getByText("Priority · Elderly")).toBeVisible();
+  await room(page).getByRole("button", { name: "Call next" }).click();
+  await expect(room(page).getByText("CW-003", { exact: true })).toBeVisible();
+  await expect(room(page).getByText(/priority \(Elderly\)/)).toBeVisible();
+
+  // The Blood test room calls from its own queue, unaffected by the consultations.
+  const blood = room(page, "Blood test · Room 1");
+  await blood.getByRole("button", { name: "Call next" }).click();
+  await expect(blood.getByText("BW-001", { exact: true })).toBeVisible();
+
+  // Call now: once the consultation room is free, staff pick CW-002 out of order.
+  await room(page).getByRole("button", { name: "Served", exact: true }).click();
+  await waitingList(page).getByRole("button", { name: "Call now CW-002" }).click();
+  await expect(room(page).getByText("CW-002", { exact: true })).toBeVisible();
+  await expect(room(page).getByText("CW-002 called by staff (Call now).")).toBeVisible();
 });
 
 test("prints a token slip for a walk-in and for a checked-in appointment", async ({ page }) => {
@@ -92,61 +124,54 @@ test("prints a token slip for a walk-in and for a checked-in appointment", async
   await addWalkIn(page, "Mahbub Alam");
   await page.getByRole("button", { name: "Print token", exact: true }).click();
   await expect.poll(async () => (await printed()).length).toBe(1);
-  const walkInSlip = (await printed())[0];
-  expect(walkInSlip).toContain("W-001");
-  expect(walkInSlip).toContain("Walk-in");
-  expect(walkInSlip).toContain("Place in line");
-  expect(walkInSlip).not.toContain("Mahbub"); // the slip carries no name
-  await expect(page.locator("#print-slip")).toHaveCount(0); // removed after printing
-  await expect(page.getByRole("button", { name: "Print token", exact: true })).toHaveCount(0); // card cleared
+  const slip = (await printed())[0];
+  for (const text of ["CW-001", "Walk-in", "General consultation", "Room 1", "Place in queue"]) expect(slip).toContain(text);
+  expect(slip).not.toContain("Mahbub"); // the slip carries no name
+  await expect(page.locator("#print-slip")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Print token", exact: true })).toHaveCount(0);
 
-  // A booked appointment gets its slip at check-in.
-  // Take the first free slot the form offers (always today, even close to midnight).
-  await page.getByRole("button", { name: "Appointment", exact: true }).click();
-  const scheduledAt = Number(await page.getByLabel("Time today").inputValue());
+  // A follow-up appointment gets its slip at check-in.
+  const scheduledAt = await laterSlot(page);
   const booked = await request.post("/api/action", {
     data: { type: "book", name: "Nusrat Jahan", service: "follow_up", scheduledAt },
   });
   expect(booked.ok()).toBeTruthy();
   await page.reload();
   await page.getByRole("button", { name: /Booked, not arrived/ }).click();
-  await page.getByRole("button", { name: "Check in A-001" }).click();
+  await page.getByRole("button", { name: "Check in FA-001" }).click();
   await page.getByRole("button", { name: "Print token", exact: true }).click();
   await expect.poll(async () => (await printed()).length).toBe(1); // counter resets on reload
-  expect((await printed())[0]).toContain("A-001");
-  expect((await printed())[0]).toContain("Appointment");
+  expect((await printed())[0]).toContain("FA-001");
+  expect((await printed())[0]).toContain("Follow-up");
 
   // Reprint from the waiting list.
-  await page.getByRole("button", { name: /Waiting/ }).click();
-  await page.getByRole("button", { name: "Print token W-001" }).click();
+  await page.getByRole("button", { name: /^Waiting/ }).click();
+  await page.getByRole("button", { name: "Print token CW-001" }).click();
   await expect.poll(async () => (await printed()).length).toBe(2);
-  expect((await printed())[1]).toContain("W-001");
+  expect((await printed())[1]).toContain("CW-001");
 });
 
-test("double-booking is refused and the slot shows as full", async ({ page }) => {
+test("double-booking within a service is refused and the slot shows as full", async ({ page }) => {
   const request = page.request;
   await page.goto("/staff");
   await page.getByRole("button", { name: "Appointment", exact: true }).click();
   const time = page.getByLabel("Time today");
   const firstSlot = Number(await time.inputValue());
-  const res = await request.post("/api/action", {
-    data: { type: "book", name: "Nadia Ahmed", service: "consultation", scheduledAt: firstSlot },
-  });
-  expect(res.ok()).toBeTruthy();
+  expect((await request.post("/api/action", { data: { type: "book", name: "Nadia Ahmed", service: "consultation", scheduledAt: firstSlot } })).ok()).toBeTruthy();
   const clash = await request.post("/api/action", {
     data: { type: "book", name: "Omar Sani", service: "consultation", scheduledAt: firstSlot },
   });
   expect(clash.status()).toBe(400);
-  expect((await clash.json()).error).toContain("clashes with A-001");
-
-  // After the next poll the form greys the taken slot out.
+  expect((await clash.json()).error).toContain("clashes with CA-001");
+  // A different service at the same time is fine: it has its own room.
+  expect((await request.post("/api/action", { data: { type: "book", name: "Omar Sani", service: "blood_test", scheduledAt: firstSlot } })).ok()).toBeTruthy();
   await expect(time.locator(`option[value="${firstSlot}"]`)).toBeDisabled({ timeout: 8_000 });
 });
 
-test("/display reflects every staff change", async ({ page, context }) => {
+test("/display shows each queue and follows every staff change", async ({ page, context }) => {
   page.on("dialog", (d) => d.accept());
   const display = await context.newPage();
-  await display.goto("/display?token=W-002");
+  await display.goto("/display?token=CW-002");
   await expect(display.getByRole("heading", { level: 1 })).toContainText("Hygieia Wellness Clinic");
   await expect(display.getByText(/isn't waiting right now/)).toBeVisible();
 
@@ -154,25 +179,18 @@ test("/display reflects every staff change", async ({ page, context }) => {
   await addWalkIn(page, "Jannat Ara");
   await addWalkIn(page, "Fahad Rahman");
 
-  // Display picks up both walk-ins (polls every 3 s), initials only.
-  const waiting = display.getByRole("region", { name: "Waiting" });
-  await expect(waiting.getByText("W-001")).toBeVisible();
-  await expect(waiting.getByText("J.")).toBeVisible();
+  const consult = display.getByRole("region", { name: "General consultation" });
+  await expect(consult.getByText("CW-001")).toBeVisible();
+  await expect(consult.getByText("J.")).toBeVisible();
   await expect(display.getByText("Jannat Ara")).toHaveCount(0);
-  await expect(display.getByText(/You are number 2 in line/)).toBeVisible();
+  await expect(display.getByText(/You are number 2 in the General consultation queue/)).toBeVisible();
 
-  // Call next: W-001 moves to now serving, W-002 becomes number 1.
-  await counter(page).getByRole("button", { name: "Call next" }).click();
-  const serving = display.getByRole("region", { name: "Now serving" });
-  await expect(serving.getByText("W-001")).toBeVisible();
-  await expect(display.getByText(/You are number 1 in line/)).toBeVisible();
+  await room(page).getByRole("button", { name: "Call next" }).click();
+  await expect(display.getByText(/You are number 1 in the General consultation queue/)).toBeVisible();
 
-  // Served & call next: W-002 is called, and the highlighted patient is told where to go.
-  await counter(page).getByRole("button", { name: "Served & call next" }).click();
-  await expect(display.getByText(/It's your turn. Please go to counter 1/)).toBeVisible();
-  await expect(serving.getByText("W-002")).toBeVisible();
+  await room(page).getByRole("button", { name: "Served & call next" }).click();
+  await expect(display.getByText(/It's your turn. Please go to General consultation · Room 1/)).toBeVisible();
 
-  // No-show clears the counter on the display.
-  await counter(page).getByRole("button", { name: "No-show" }).click();
-  await expect(serving.getByText("Free")).toBeVisible();
+  await room(page).getByRole("button", { name: "No-show" }).click();
+  await expect(consult.getByText("Free")).toBeVisible();
 });

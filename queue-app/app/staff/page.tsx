@@ -33,11 +33,15 @@ function ConsoleSkeleton() {
       <h1 className="font-display text-[24px] leading-7 font-semibold sm:text-[32px] sm:leading-9 tracking-[-0.01em]">Front desk</h1>
       <div className="mt-2 h-5 w-64 rounded bg-raised" />
       <div className="mt-6 flex flex-col gap-6">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 min-[1700px]:grid-cols-5">
+          {Array.from({ length: 5 }, (_, i) => (
+            <div key={i} className="h-[190px] rounded-lg border border-border" />
+          ))}
+        </div>
         <div className="grid grid-cols-[minmax(0,1fr)] gap-6 min-[1280px]:grid-cols-2">
-          <div className="h-[226px] rounded-lg border border-border" />
+          <div className="h-[260px] rounded-lg border border-border" />
           <div className="h-[260px] rounded-lg border border-border" />
         </div>
-        <div className="h-[130px] rounded-lg border border-border" />
         <div className="grid grid-cols-[minmax(0,1fr)] gap-6 min-[1280px]:grid-cols-[minmax(0,1fr)_352px]">
           <div className="h-[320px] rounded-lg border border-border" />
           <div className="h-[230px] rounded-lg border border-border" />

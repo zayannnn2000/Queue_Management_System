@@ -164,7 +164,10 @@ function AppointmentForm({ onIssued }: { onIssued: (token: string) => void }) {
       <Field
         label="Time today"
         htmlFor="appt-time"
-        hint={`Full slots are greyed out: ${view.settings.counters} counter${view.settings.counters > 1 ? "s" : ""}, no overlaps beyond that.`}
+        hint={(() => {
+          const rooms = view.settings.services.find((s) => s.id === service)!.rooms;
+          return `Full slots are greyed out: this service has ${rooms} room${rooms > 1 ? "s" : ""}, no overlaps beyond that.`;
+        })()}
       >
         {slots.length === 0 ? (
           <p className="text-sm text-muted">No slots left today.</p>

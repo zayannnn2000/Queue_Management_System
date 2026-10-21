@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { MINUTE } from "@/lib/time";
-import { clock, firstName } from "./format";
+import { clock, firstName, serviceName } from "./format";
 import { useQueue } from "./queue-provider";
 import { Panel } from "./ui";
 
@@ -26,7 +26,7 @@ export function CallStrip() {
   /** The label that fits a bar of this many minutes: the token, its digits, or nothing. */
   const fit = (token: string, ms: number) => {
     const px = (ms / WINDOW_MS) * laneWidth;
-    return px >= 56 ? token : px >= 34 ? token.slice(2) : "";
+    return px >= 60 ? token : px >= 40 ? token.slice(token.indexOf("-") + 1) : "";
   };
   const { now, settings } = view;
   const pct = (ms: number) => `${(Math.min(Math.max(ms - now, 0), WINDOW_MS) / WINDOW_MS) * 100}%`;
@@ -48,19 +48,23 @@ export function CallStrip() {
       }
     >
       <div className="px-5 pb-4">
-        <div className="relative ml-20 h-5 text-xs text-muted" aria-hidden="true">
+        <div className="relative ml-28 h-5 text-xs text-muted sm:ml-36" aria-hidden="true">
           {ticks.map((t) => (
             <span key={t} className="num absolute -translate-x-1/2" style={{ left: pct(t) }}>
               {clock(t, settings)}
             </span>
           ))}
         </div>
-        <ol className="mt-1 flex flex-col gap-2" aria-label="Projected call order">
-          {view.counters.map((c, i) => {
-            const lane = view.waiting.filter((w) => w.projectedCounter === c.counter && w.startAt < now + WINDOW_MS);
+        <ol className="mt-1 flex flex-col gap-2" aria-label="Projected call order per room">
+          {view.rooms.map((c, i) => {
+            const lane = view.waiting.filter((w) => w.projectedRoom === c.id && w.startAt < now + WINDOW_MS);
+            const rooms = settings.services.find((s) => s.id === c.serviceId)!.rooms;
             return (
-              <li key={c.counter} className="flex items-center">
-                <span className="w-20 flex-none text-xs text-muted">Counter {c.counter}</span>
+              <li key={c.id} className="flex items-center">
+                <span className="w-28 flex-none truncate pr-2 text-xs text-muted sm:w-36" title={c.label}>
+                  {serviceName(settings, c.serviceId)}
+                  {rooms > 1 ? ` · ${c.n}` : ""}
+                </span>
                 <div ref={i === 0 ? laneRef : undefined} className="relative h-8 flex-1 rounded-full bg-raised">
                   {ticks.map((t) => (
                     <span

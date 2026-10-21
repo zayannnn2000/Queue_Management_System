@@ -11,10 +11,10 @@ import { PrintSlip } from "./token-slip";
 import { Panel } from "./ui";
 
 /**
- * Front desk. From 1280 px: the counters and Add patient share the top row (the two jobs done most),
- * the Next-hour strip runs full width, then the lists beside the service times.
- * At 1440: sheet 1184 − 2 × 32 padding = 1120 = 548 + 24 + 548 on top; 744 + 24 + 352 below.
- * Below 1280 everything stacks: counters, Add patient, strip, lists, service times.
+ * Front desk. One card per service room across the top; then Add patient beside the Next-hour
+ * strip (one lane per room); then the lists beside the service times.
+ * At 1440: sheet 1184 − 2 × 32 padding = 1120 = 548 + 24 + 548 in the middle row; 744 + 24 + 352 below.
+ * Below 1280 everything stacks.
  */
 export function StaffConsole() {
   return (
@@ -22,11 +22,11 @@ export function StaffConsole() {
       <PrintSlip />
       <TitleRow />
       <div className="mt-6 flex min-w-0 flex-col gap-6">
+        <NowServing />
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-6 min-[1280px]:grid-cols-2">
-          <NowServing />
           <CustomerForm />
+          <CallStrip />
         </div>
-        <CallStrip />
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-6 min-[1280px]:grid-cols-[minmax(0,1fr)_352px]">
           <QueueLists />
           <ServiceTimes />
@@ -42,9 +42,11 @@ function finding(view: QueueView): string {
   const waiting = view.waiting.length;
   parts.push(waiting === 0 ? "Nobody waiting" : `${waiting} waiting`);
   if (waiting > 0) {
-    const last = view.waiting[waiting - 1];
-    parts.push(`last in line seen in ${last.waitLabel === "Due now" ? "a moment" : last.waitLabel.replace("~", "about ")}`);
+    const longest = view.waiting.reduce((a, b) => (b.waitMs > a.waitMs ? b : a));
+    parts.push(`longest wait ${longest.waitLabel === "Due now" ? "under 5 min" : longest.waitLabel.replace("~", "about ")}`);
   }
+  const priority = view.waiting.filter((w) => w.priority).length;
+  if (priority > 0) parts.push(`${priority} priority`);
   const overdue = view.booked.filter((b) => b.overdue).length;
   if (overdue > 0) parts.push(`${overdue} booking${overdue > 1 ? "s" : ""} overdue`);
   const late = view.waiting.filter((w) => w.lateConverted).length;

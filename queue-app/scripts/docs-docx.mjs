@@ -146,6 +146,9 @@ const content = [
   }),
   p(`**Live app:** ${LIVE} (front desk \`/staff\`, demo PIN \`12345\`; waiting-room display \`/display\`)`),
   p(`**Source:** ${REPO}`),
+  p(
+    "**Before you start:** sign in with PIN `12345`, then open **Settings**. **Load sample day** fills the queue with 10 fictional patients to try everything at once; **Reset day** clears today's queue and restarts tokens at W-001 / A-001. The queue also clears itself at midnight (Dhaka time).",
+  ),
   p("**Stack:** Next.js 16 and TypeScript on Vercel; shared state in Upstash Redis. A simulation: all patients are fictional."),
 
   h1("1. Key design decisions"),

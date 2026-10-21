@@ -8,8 +8,15 @@ patients, call the next one and see estimated waits; patients follow their place
     settings: [`/staff/settings`](https://queue-management-system-jet-six.vercel.app/staff/settings)
   - Waiting-room display: [`/display`](https://queue-management-system-jet-six.vercel.app/display),
     with `?token=W-004` to highlight one patient
+
+> **Before you start:** sign in to the staff console with PIN `12345`, then open **Settings** (left sidebar):
+> - **Load sample day** fills the queue with 10 fictional patients (some served, one being seen, some waiting,
+>   and appointments, including an overdue one), so you can try everything straight away.
+> - **Reset day** clears today's queue and restarts tokens at W-001 / A-001, for testing from scratch.
+>
+> The queue also clears itself at midnight (Dhaka time), so if the lists look empty, use one of these.
+
 - **Host:** Vercel (Next.js), shared state in Upstash Redis from the Vercel Marketplace.
-- **Sample data:** Settings → *Load sample day* loads 10 fictional patients. All names are invented.
 
 ## How to run
 

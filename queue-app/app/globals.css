@@ -55,8 +55,16 @@
 }
 
 html {
+  color-scheme: light;
   background: var(--ground);
   color: var(--text);
+}
+
+button,
+a,
+select,
+input {
+  touch-action: manipulation;
 }
 
 body {

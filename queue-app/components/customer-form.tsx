@@ -17,7 +17,7 @@ export function CustomerForm() {
   return (
     <Panel title="Add patient" id="add-heading">
       <div className="px-5 pb-5">
-        <div role="radiogroup" aria-label="Booking type" className="inline-flex rounded-md bg-raised p-0.5">
+        <div role="group" aria-label="Booking type" className="inline-flex rounded-md bg-raised p-0.5">
           {(
             [
               ["walk_in", "Walk-in"],
@@ -27,8 +27,7 @@ export function CustomerForm() {
             <button
               key={id}
               type="button"
-              role="radio"
-              aria-checked={kind === id}
+              aria-pressed={kind === id}
               onClick={() => setKind(id)}
               className={`h-8 rounded-[5px] border px-3 text-sm transition-colors ${
                 kind === id ? "border-border bg-surface font-medium text-ink" : "border-transparent text-muted hover:text-ink"
@@ -100,11 +99,13 @@ function WalkInForm({ onIssued }: { onIssued: (token: string) => void }) {
   const { state, actions, meta } = useQueue();
   const [name, setName] = useState("");
   const [service, setService] = useState(state.view.settings.services[0].id);
+  const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const res = await actions.run({ type: "addWalkIn", name, service });
-    if (res?.issued) {
+    setError(res.ok ? null : res.error);
+    if (res.ok && res.issued) {
       onIssued(res.issued);
       setName("");
     }
@@ -114,6 +115,7 @@ function WalkInForm({ onIssued }: { onIssued: (token: string) => void }) {
     <form onSubmit={submit} className="mt-4 flex flex-col gap-4" aria-label="Add walk-in">
       <NameAndService name={name} setName={setName} service={service} setService={setService} prefix="walkin" />
       <p className="text-xs text-muted">Joins the queue now. Their target time is their arrival.</p>
+      <FormError error={error} />
       <PrimaryButton type="submit" disabled={meta.pending} className="h-10 self-start">
         Add walk-in
       </PrimaryButton>
@@ -129,12 +131,14 @@ function AppointmentForm({ onIssued }: { onIssued: (token: string) => void }) {
   const slots = slotOptions(view, service);
   const firstFree = slots.find((s) => !s.clash)?.value ?? 0;
   const [chosen, setChosen] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const scheduledAt = chosen !== null && slots.some((s) => s.value === chosen && !s.clash) ? chosen : firstFree;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const res = await actions.run({ type: "book", name, service, scheduledAt });
-    if (res?.issued) {
+    setError(res.ok ? null : res.error);
+    if (res.ok && res.issued) {
       onIssued(res.issued);
       setName("");
       setChosen(null);
@@ -171,10 +175,19 @@ function AppointmentForm({ onIssued }: { onIssued: (token: string) => void }) {
       <p className="text-xs text-muted">
         Not queued until they check in. Arriving more than {view.settings.graceMinutes} min late makes them a walk-in.
       </p>
+      <FormError error={error} />
       <PrimaryButton type="submit" disabled={meta.pending || !firstFree} className="h-10 self-start">
         Book appointment
       </PrimaryButton>
     </form>
+  );
+}
+
+export function FormError({ error }: { error: string | null }) {
+  return (
+    <p role="alert" className={error ? "rounded-md bg-bad-bg px-3 py-2 text-sm text-bad-ink" : "sr-only"}>
+      {error ?? ""}
+    </p>
   );
 }
 

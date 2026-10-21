@@ -58,7 +58,7 @@ export function DisplayBoard({ initial, highlight }: { initial: PublicView; high
               <li key={c.counter} className="flex items-baseline justify-between gap-4">
                 <span className="text-xl whitespace-nowrap text-white/80 md:text-2xl">Counter {c.counter}</span>
                 {c.token ? (
-                  <span className="font-mono text-5xl font-medium whitespace-nowrap sm:text-6xl xl:text-8xl">
+                  <span translate="no" className="font-mono text-5xl font-medium whitespace-nowrap sm:text-6xl xl:text-8xl">
                     {c.token}
                     <span className="ml-3 font-sans text-3xl text-white/80 md:text-4xl">{c.initial}</span>
                   </span>
@@ -71,7 +71,7 @@ export function DisplayBoard({ initial, highlight }: { initial: PublicView; high
           {view.waiting.length > 0 ? (
             <div className="mt-8 border-t border-white/15 pt-6">
               <h3 className="text-lg text-white/80 md:text-xl">Please get ready</h3>
-              <p className="mt-2 flex flex-wrap gap-x-6 gap-y-1 font-mono text-3xl font-medium md:text-4xl">
+              <p translate="no" className="mt-2 flex flex-wrap gap-x-6 gap-y-1 font-mono text-3xl font-medium md:text-4xl">
                 {view.waiting.slice(0, 2).map((w) => (
                   <span key={w.token}>{w.token}</span>
                 ))}
@@ -132,7 +132,7 @@ function Row({ row, mine }: { row: PublicRow; mine: boolean }) {
     >
       <td className="num h-16 pr-3 text-right text-muted sm:pr-4">{row.position}</td>
       <td className="h-16">
-        <span className={`font-mono font-medium ${mine ? "text-accent" : ""}`}>{row.token}</span>
+        <span translate="no" className={`font-mono font-medium ${mine ? "text-accent" : ""}`}>{row.token}</span>
         <span className="ml-3 text-muted">{row.initial}</span>
         {mine ? <span className="ml-2 text-base font-medium text-accent sm:ml-3 sm:text-lg">You</span> : null}
       </td>
@@ -151,7 +151,7 @@ function YourStatus({ token, row, servingAt }: { token: string; row?: PublicRow;
       aria-live="polite"
       className="mt-6 flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-2xl bg-accent-pale px-6 py-4 text-accent"
     >
-      <h2 className="font-mono text-3xl font-medium">{token}</h2>
+      <h2 translate="no" className="font-mono text-3xl font-medium">{token}</h2>
       <p className="text-xl text-ink md:text-2xl">{text}</p>
     </section>
   );

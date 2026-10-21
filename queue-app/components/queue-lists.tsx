@@ -30,16 +30,15 @@ export function QueueLists() {
       <h2 id="lists-heading" className="sr-only">
         Patients
       </h2>
-      <div role="tablist" aria-label="Patient lists" className="grid grid-cols-3 gap-2 p-3">
+      <div role="group" aria-label="Show list" className="grid grid-cols-3 gap-2 p-3">
         {cards.map((card) => {
           const selected = filter === card.id;
           return (
             <button
               key={card.id}
-              role="tab"
-              id={`tab-${card.id}`}
-              aria-selected={selected}
-              aria-controls={`panel-${card.id}`}
+              type="button"
+              aria-pressed={selected}
+              aria-controls="patient-list"
               onClick={() => setFilter(card.id)}
               className={`flex min-h-[61px] flex-col justify-center rounded-md p-3 text-left transition-colors ${
                 selected
@@ -54,7 +53,7 @@ export function QueueLists() {
         })}
       </div>
 
-      <div role="tabpanel" id={`panel-${filter}`} aria-labelledby={`tab-${filter}`} className="overflow-x-auto">
+      <div id="patient-list" aria-label={cards.find((c) => c.id === filter)!.label} role="region" className="overflow-x-auto">
         {filter === "waiting" ? (
           <WaitingTable rows={view.waiting} onEdit={setEditing} />
         ) : filter === "booked" ? (

@@ -8,12 +8,15 @@ export const POLL_MS = 3000;
 
 type StaffAction = Action | { type: "seed" };
 
-export interface ActionOutcome {
-  message: string | null;
-  called: CallRecord | null;
-  /** Token issued by addWalkIn / book. */
-  issued: string | null;
-}
+export type ActionOutcome =
+  | {
+      ok: true;
+      message: string | null;
+      called: CallRecord | null;
+      /** Token issued by addWalkIn / book. */
+      issued: string | null;
+    }
+  | { ok: false; error: string };
 
 export interface Notice {
   kind: "ok" | "error";
@@ -30,8 +33,8 @@ interface QueueContextValue {
     stale: boolean;
   };
   actions: {
-    /** Runs a staff action on the server. Resolves with the result, or null when it failed. */
-    run: (action: StaffAction) => Promise<ActionOutcome | null>;
+    /** Runs a staff action on the server. Never rejects: failures resolve with `ok: false`. */
+    run: (action: StaffAction) => Promise<ActionOutcome>;
     dismiss: () => void;
   };
   meta: { pending: boolean };
@@ -89,7 +92,7 @@ export function QueueProvider({
 
   const run = useCallback((action: StaffAction) => {
     inFlight.current++;
-    return new Promise<ActionOutcome | null>((resolve) => {
+    return new Promise<ActionOutcome>((resolve) => {
       startTransition(async () => {
         try {
           const res = await fetch("/api/action", {
@@ -100,17 +103,18 @@ export function QueueProvider({
           const data = await res.json();
           if (!data.ok) {
             setNotice({ kind: "error", text: data.error, at: Date.now() });
-            resolve(null);
+            resolve({ ok: false, error: data.error });
             return;
           }
           setView(data.view);
           setStale(false);
           if (data.called) setLastCall(data.called);
           if (data.message) setNotice({ kind: "ok", text: data.message, at: Date.now() });
-          resolve({ message: data.message, called: data.called, issued: data.issued ?? null });
+          resolve({ ok: true, message: data.message, called: data.called, issued: data.issued ?? null });
         } catch {
-          setNotice({ kind: "error", text: "Couldn't reach the server. Check the connection and try again.", at: Date.now() });
-          resolve(null);
+          const error = "Couldn't reach the server. Check the connection and try again.";
+          setNotice({ kind: "error", text: error, at: Date.now() });
+          resolve({ ok: false, error });
         } finally {
           inFlight.current--;
         }

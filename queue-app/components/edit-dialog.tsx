@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Customer } from "@/lib/queue";
 import { MAX_NAME_LENGTH } from "@/lib/queue";
+import { FormError } from "./customer-form";
 import { clock, slotOptions } from "./format";
 import { useQueue } from "./queue-provider";
 import { Field, PrimaryButton, SecondaryButton, Token, inputClass } from "./ui";
@@ -15,6 +16,7 @@ export function EditDialog({ customer, onClose }: { customer: Customer; onClose:
   const [name, setName] = useState(customer.name);
   const [service, setService] = useState(customer.service);
   const [scheduledAt, setScheduledAt] = useState(customer.scheduledAt ?? 0);
+  const [error, setError] = useState<string | null>(null);
   const isAppointment = customer.type === "appointment";
 
   useEffect(() => {
@@ -31,14 +33,15 @@ export function EditDialog({ customer, onClose }: { customer: Customer; onClose:
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    const ok = await actions.run({
+    const res = await actions.run({
       type: "edit",
       id: customer.id,
       name,
       service,
       ...(isAppointment ? { scheduledAt } : {}),
     });
-    if (ok) ref.current?.close();
+    if (res.ok) ref.current?.close();
+    else setError(res.error);
   };
 
   return (
@@ -46,7 +49,7 @@ export function EditDialog({ customer, onClose }: { customer: Customer; onClose:
       ref={ref}
       onClose={onClose}
       aria-labelledby="edit-title"
-      className="m-auto w-[min(440px,calc(100vw-32px))] rounded-lg border border-border bg-surface p-0 text-ink shadow-[0_12px_32px_rgba(0,0,0,0.16)] backdrop:bg-black/30"
+      className="m-auto w-[min(440px,calc(100vw-32px))] overscroll-contain rounded-lg border border-border bg-surface p-0 text-ink shadow-[0_12px_32px_rgba(0,0,0,0.16)] backdrop:bg-black/30"
     >
       <form onSubmit={save} className="flex flex-col gap-4 p-5">
         <h2 id="edit-title" className="text-base font-semibold">
@@ -93,6 +96,7 @@ export function EditDialog({ customer, onClose }: { customer: Customer; onClose:
             </select>
           </Field>
         ) : null}
+        <FormError error={error} />
         <div className="mt-2 flex justify-end gap-2">
           <SecondaryButton type="button" onClick={() => ref.current?.close()}>
             Close

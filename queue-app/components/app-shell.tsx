@@ -9,6 +9,13 @@ import { NavLinks } from "./nav-links";
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
+    <>
+    <a
+      href="#main"
+      className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-sm text-white focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
+    >
+      Skip to content
+    </a>
     <div className="min-h-screen min-[1100px]:grid min-[1100px]:grid-cols-[228px_minmax(0,1fr)] min-[1100px]:grid-rows-[48px_minmax(0,1fr)]">
       <aside className="hidden min-[1100px]:row-span-2 min-[1100px]:flex min-[1100px]:flex-col min-[1100px]:px-3 min-[1100px]:pt-3 min-[1100px]:pb-4">
         <ProductMark />
@@ -27,10 +34,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
       <NavLinks className="flex gap-1 overflow-x-auto px-3 pb-2 sm:hidden" variant="bar" />
 
-      <main className="min-w-0 bg-surface min-[1100px]:mr-2 min-[1100px]:mb-2 min-[1100px]:rounded-2xl min-[1100px]:border min-[1100px]:border-border">
+      <main id="main" tabIndex={-1} className="min-w-0 bg-surface outline-none min-[1100px]:mr-2 min-[1100px]:mb-2 min-[1100px]:rounded-2xl min-[1100px]:border min-[1100px]:border-border">
         {children}
       </main>
     </div>
+    </>
   );
 }
 

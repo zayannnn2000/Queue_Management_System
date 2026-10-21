@@ -15,7 +15,8 @@ export function DisplayBoard({ initial, highlight }: { initial: PublicView; high
   const [stale, setStale] = useState(false);
 
   useEffect(() => {
-    const id = window.setInterval(async () => {
+    const poll = async () => {
+      if (document.hidden) return;
       try {
         const res = await fetch("/api/state?view=public", { cache: "no-store" });
         if (!res.ok) throw new Error(String(res.status));
@@ -24,8 +25,14 @@ export function DisplayBoard({ initial, highlight }: { initial: PublicView; high
       } catch {
         setStale(true);
       }
-    }, POLL_MS);
-    return () => window.clearInterval(id);
+    };
+    const id = window.setInterval(poll, POLL_MS);
+    // A phone coming back to the page refreshes at once instead of waiting for a throttled timer.
+    document.addEventListener("visibilitychange", poll);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", poll);
+    };
   }, []);
 
   const mine = highlight ? view.waiting.find((w) => w.token === highlight) : undefined;

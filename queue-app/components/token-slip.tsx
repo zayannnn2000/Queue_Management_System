@@ -7,8 +7,8 @@ import { useQueue } from "./queue-provider";
 import { PrimaryButton, TextButton, Token } from "./ui";
 
 /**
- * The paper slip handed to the patient: token, booking, service, place and estimated wait, and
- * where to follow their turn. Rendered into <body> only while printing; the print stylesheet in
+ * The paper slip handed to the patient: token, booking, service, place and estimated wait.
+ * Rendered into <body> only while printing; the print stylesheet in
  * globals.css hides everything else and sizes the page for an 80 mm receipt printer.
  */
 export function PrintSlip() {
@@ -27,25 +27,25 @@ export function PrintSlip() {
       : customer.lateConverted
         ? "Appointment, joined as walk-in"
         : `Appointment ${clock(customer.scheduledAt!, settings)}`;
-  const displayUrl = `${window.location.origin}/display?token=${encodeURIComponent(customer.token)}`;
   const date = new Intl.DateTimeFormat("en-GB", { timeZone: settings.timezone, weekday: "short", day: "numeric", month: "short" }).format(view.now);
 
+  // The page is 80 mm wide with 4 mm margins, so the slip fills the 72 mm between them, centred.
   return createPortal(
-    <div id="print-slip" className="hidden font-sans text-black" style={{ width: "72mm" }}>
+    <div id="print-slip" className="hidden font-sans text-black" style={{ width: "100%", maxWidth: "72mm", margin: "0 auto" }}>
       <div style={{ textAlign: "center" }}>
         <div style={{ display: "flex", justifyContent: "center" }}>
-          <HygieiaMark size={44} />
+          <HygieiaMark size={48} />
         </div>
-        <p className="font-display" style={{ fontSize: 26, fontWeight: 600, lineHeight: 1, marginTop: 6 }}>
+        <p className="font-display" style={{ fontSize: 28, fontWeight: 600, lineHeight: 1, marginTop: 6 }}>
           Hygieia
         </p>
-        <p style={{ fontSize: 11 }}>Wellness Clinic</p>
-        <p style={{ fontSize: 11, marginTop: 14 }}>Your token</p>
-        <p className="font-display" style={{ fontSize: 64, fontWeight: 700, lineHeight: 1, marginTop: 2 }}>
+        <p style={{ fontSize: 12, marginTop: 4 }}>Wellness Clinic</p>
+        <p style={{ fontSize: 13, marginTop: 16 }}>Your token</p>
+        <p className="font-display" style={{ fontSize: 84, fontWeight: 700, lineHeight: 1, marginTop: 4 }}>
           {customer.token}
         </p>
       </div>
-      <dl style={{ fontSize: 12, marginTop: 14, display: "grid", gridTemplateColumns: "auto 1fr", gap: "3px 10px" }}>
+      <dl style={{ fontSize: 13, marginTop: 16, display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 10px" }}>
         <dt>Booking</dt>
         <dd style={{ textAlign: "right", fontWeight: 600 }}>{booking}</dd>
         <dt>Service</dt>
@@ -63,11 +63,7 @@ export function PrintSlip() {
           {date}, {clock(view.now, settings)}
         </dd>
       </dl>
-      <p style={{ fontSize: 11, marginTop: 14, lineHeight: 1.4 }}>
-        Please watch the waiting-room screen for your number. You can also follow your place at:
-      </p>
-      <p style={{ fontSize: 10, marginTop: 4, wordBreak: "break-all" }}>{displayUrl}</p>
-      <p style={{ fontSize: 11, marginTop: 12, textAlign: "center" }}>Please keep this slip until you are called.</p>
+      <p style={{ fontSize: 12, marginTop: 16, textAlign: "center" }}>Please keep this slip until you are called.</p>
     </div>,
     document.body,
   );

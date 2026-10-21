@@ -81,7 +81,7 @@ Every patient gets a token number; it's how they're called and how they follow t
 | **When it's issued** | A walk-in gets a W-token as soon as staff click **Add walk-in**. An appointment gets its A-token when it's booked (quote it to the patient); it joins the queue only when they **Check in**. |
 | **It never changes** | Editing a patient keeps the token. A patient who arrives more than 10 minutes late keeps their A-token but joins as a walk-in ("Late, now walk-in"). |
 | **Printing** | After **Add walk-in** or **Check in**, a card shows the token, place and wait with **Print token**; the card clears once printed. Every row in the Waiting list has **Print** for a reprint. |
-| **The slip** | Logo, the token in large type, walk-in or appointment time, service, place in line, estimated wait, time issued, and a link to follow it on the display. **No patient name.** Sized for an 80 mm receipt printer; prints on any printer through the browser's print dialog. |
+| **The slip** | Logo, the token in large type, walk-in or appointment time, service, place in line, estimated wait and time issued. **No patient name.** Printed on an 80 mm page (80 × 120 mm) for receipt printers; works on any printer through the browser's print dialog. |
 | **Being called** | Call next shows the token on the counter card with the reason it was picked, and on the waiting-room display under **Now serving**. The next two tokens appear under **Please get ready**. |
 | **Following your token** | The display lists every waiting token with its first initial, place and wait. Open `/display?token=W-004`, or type the token into **Find my token**, to highlight that row with a plain message such as "You are number 2 in line" or "It's your turn. Please go to counter 1." |
 

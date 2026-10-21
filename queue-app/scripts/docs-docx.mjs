@@ -187,10 +187,10 @@ const content = [
 
   h1("4. Waiting-time calculation"),
   box([
-    "**Expected visit length** (per service) = mean of the last 5 served visits (called → served), each clamped to 1 min … 3 × the default. Before any data exists, the default is used. No-shows and cancellations never count.",
-    "**Each counter is free at** now if idle, otherwise now + max(expected − elapsed, 1 min).",
-    "**Forward simulation:** repeatedly take the counter that frees up first (time t), apply the same call-next rule at t, start that patient at t, and mark the counter free again at t + expected. **Wait = start − now**; the patient's position is their order in this projection.",
-    '**Shown as** "Due now" when ≤ 2 min, otherwise "~X min" rounded up to the next 5. Recomputed after every action and every 3-second refresh.',
+    "**1. How long a visit takes.** For each service, the average of its last 5 real visits. Until there are real visits, the default length is used. No-shows don't count, and one very long or very short visit is capped so it can't distort the average.",
+    "**2. Play the queue forward.** The system works out when the counter will next be free: now if nobody is with the doctor, otherwise when the current patient should finish (at least 1 minute away). At that moment it \"calls\" the next patient using the same rule as the Call next button, notes their start time, adds their visit length, and repeats down the list.",
+    "**3. The wait.** Wait = predicted start time − now. With one counter (as in the live demo) this is simply: **time left for the current patient + the visit lengths of everyone ahead.** With more counters, each patient goes to whichever counter frees up first.",
+    '**4. How it\'s shown.** "Due now" for 2 minutes or less; otherwise "~X min", rounded up to the next 5. Updated after every action and every 3 seconds.',
   ]),
   p("", { spacing: { after: 40 } }),
   p("**Worked example** (also a unit test): 1 counter, now 10:00, the patient being served is expected to finish at 10:06, and no visit data yet."),

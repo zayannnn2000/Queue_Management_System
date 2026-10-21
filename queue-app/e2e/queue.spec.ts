@@ -34,8 +34,11 @@ test("full staff flow: add, book, check in, call next, serve, no-show", async ({
 
   // Check in from the booked list.
   await page.getByRole("button", { name: /Booked, not arrived/ }).click();
+  await expect(page.getByText("Appointment booked. Quote this token to the patient.")).toBeVisible();
   await page.getByRole("button", { name: "Check in A-001" }).click();
   await expect(page.getByRole("status").getByText(/A-001 checked in/)).toBeVisible();
+  // The booking note goes once they've checked in.
+  await expect(page.getByText("Appointment booked. Quote this token to the patient.")).toHaveCount(0);
 
   // Call next: the walk-in is due now; the appointment's slot is still ahead.
   await page.getByRole("button", { name: /Waiting/ }).click();
@@ -90,6 +93,7 @@ test("prints a token slip for a walk-in and for a checked-in appointment", async
   expect(walkInSlip).toContain("Place in line");
   expect(walkInSlip).not.toContain("Mahbub"); // the slip carries no name
   await expect(page.locator("#print-slip")).toHaveCount(0); // removed after printing
+  await expect(page.getByRole("button", { name: "Print token", exact: true })).toHaveCount(0); // card cleared
 
   // A booked appointment gets its slip at check-in.
   // Take the first free slot the form offers (always today, even close to midnight).

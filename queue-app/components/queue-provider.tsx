@@ -75,11 +75,13 @@ export function QueueProvider({
   const inFlight = useRef(0);
 
   // Print once the slip for `printing` has rendered, then take it off the page.
+  // Printing the token in the "ready" card also clears that card: the patient has their slip.
   useEffect(() => {
     if (!printing) return;
     const frame = window.requestAnimationFrame(() => {
       window.print();
       setPrinting(null);
+      setReady((current) => (current === printing ? null : current));
     });
     return () => window.cancelAnimationFrame(frame);
   }, [printing]);

@@ -11,6 +11,7 @@ type Kind = "walk_in" | "appointment";
 
 /** Add a patient: a segmented switch between the walk-in and appointment forms. */
 export function CustomerForm() {
+  const { view } = useQueue().state;
   const [kind, setKind] = useState<Kind>("walk_in");
   const [booked, setBooked] = useState<string | null>(null);
 
@@ -45,7 +46,8 @@ export function CustomerForm() {
         )}
 
         <TokenReady />
-        {booked ? <BookedNote token={booked} /> : null}
+        {/* Only while the booking is still waiting to arrive: once checked in or cancelled it goes. */}
+        {booked && view.booked.some((b) => b.token === booked) ? <BookedNote token={booked} /> : null}
       </div>
     </Panel>
   );

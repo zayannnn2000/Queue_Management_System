@@ -167,6 +167,44 @@ proposed and what was corrected. Model: Claude (Opus) in Claude Code. Dates: 21 
 - **Tested by:** the PDF page is 227 × 454 pt (80 × 160 mm) and 1 page; the QR was decoded by machine (jsQR) to
   `/display?token=W-005`; 34/34 Vitest; Playwright 4 passed / 2 skipped.
 
+## 15. Per-service queues and staff priority
+- **Prompt:** the front desk should sort patients into categories with their own doctors; elderly patients and the
+  like should be called first; and an early appointment shouldn't lose out to a walk-in.
+- **Decisions (asked, then I chose):** one queue per service, each with its own room; tokens = service letter + W/A
+  (CW-004, BA-002); a staff Priority flag with a reason plus **Call now**; appointments go ahead of walk-ins from their
+  booked time; walk-ins who have waited 30 min keep their place (adjustable); one display panel per service.
+- **Changes:** `lib/queue.ts` rewritten around services and rooms (tiered call-next, per-service simulation and booking
+  check); seed spread over five services; display panels per service; stored data in the old shape starts fresh.
+- **Tested by:** rewritten Vitest suite and E2E; CLAUDE.md updated first as the source of truth.
+
+## 16. Front desk layout
+- **Prompts (several rounds, each shown locally before going further):** Add patient as the focal card; a one-row,
+  colour-coded Next-hour timeline, later made compact and moved beside the title (legend on hover only); rooms as pills
+  with Serve and Call next always visible; "Booked, not arrived" renamed **Check in**, placed under Add patient; Waiting full width.
+- **Caught:** tables overflowing at 1440 px (fixed by merging columns and two-line actions, measured in the browser, not
+  guessed); the pane's screenshots were too low-resolution to judge, so full-resolution Playwright screenshots were used.
+
+## 17. Booking across services
+- **Prompt:** "Appointments can't be booked for the same time even if it's for a different category."
+- **What happened:** Claude first tested only one path, found it worked locally and said the live (older) version was the
+  cause. I disagreed. Further tests showed the real cause: the time list greyed out times that were full for the
+  *currently selected* service (Consultation by default), and silently changed the time when the service changed.
+- **Fix:** every time stays selectable and is kept when the service changes; a time full for the chosen service is
+  explained and blocks booking. A new E2E books three services at the same time in both orders.
+- **Lesson:** when a user reports a bug, reproduce *their* path, not the easiest one.
+
+## 18. Services in Settings, and the walk-in hold
+- **Prompts:** a Settings card to add departments, with the backend to make them work; then: a walk-in's target should
+  be 15 min after arrival if another patient's appointment is due in the next few minutes, and check whether an
+  appointment always beats a walk-in.
+- **Decisions (asked, then I chose):** the hold applies to appointments due within 15 min (not only 5–10), of the same
+  service, booked or checked in.
+- **Check first:** Claude ran three scenarios against the old rules and showed that a walk-in who arrived just before an
+  appointment's time *was* called first (twice out of three), which is why the hold was needed.
+- **Changes:** `addService` / `removeService` actions (unique letter, colour, at most 10, removal only when idle);
+  `walkInHold` sets target = arrival + 15 min and the reason names the appointment it waits for.
+- **Tested by:** 52/52 Vitest (6 for services, 6 for the hold), 7 E2E (adding and removing Dental end to end).
+
 ## Things Claude did not do (by design)
 - It did not enter credentials. GitHub and Vercel sign-ins and the Upstash terms were completed by me.
 - It did not invent customers, reviews or statistics. All names are fictional.

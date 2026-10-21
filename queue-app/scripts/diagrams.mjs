@@ -57,17 +57,17 @@ ${body}
 const overview = svg(
   470,
   458,
-  "Hygieia queue workflow: walk-ins and appointments join one queue by target time",
+  "Hygieia queue workflow: each patient joins the queue of their service, ordered by target time",
   [
     box(10, 10, 165, 48, "Walk-in arrives", "Staff add name and service", "walk"),
-    box(190, 10, 165, 48, "Appointment booked", "A-token, not queued yet", "appt"),
+    box(190, 10, 165, 48, "Appointment booked", "e.g. CA-001, not queued yet", "appt"),
     box(374, 10, 86, 48, "No arrival?", ["Overdue:", "staff decide"], "note"),
-    box(10, 84, 165, 56, "W-token printed", "Target = arrival time", "walk"),
-    box(190, 84, 165, 56, "Checks in on arrival", ["A-token printed;", "over 10 min late → walk-in"], "appt"),
-    box(10, 168, 320, 52, "Waiting queue", "One line, sorted by target time", "shared"),
-    box(346, 168, 114, 52, "Public display", ["Token, initial,", "place, wait"], "shared"),
-    box(10, 248, 320, 48, "Staff call next", "Front desk behind the staff PIN", "action"),
-    box(10, 324, 320, 48, "Serving at counter", "Call time recorded, reason shown", "shared"),
+    box(10, 84, 165, 56, "Token printed (CW-004)", ["Target = arrival, or +15 min", "if a booking is due soon"], "walk"),
+    box(190, 84, 165, 56, "Checks in on arrival", ["Slip printed;", "over 10 min late → walk-in"], "appt"),
+    box(10, 168, 320, 52, "Queue of their service", ["Consultation, Blood test, …: each with its", "own room(s); staff may flag Priority"], "shared"),
+    box(346, 168, 114, 52, "Public display", ["A panel per service:", "token, initial, wait"], "shared"),
+    box(10, 248, 320, 48, "A room calls next", "From its own service queue · behind the staff PIN", "action"),
+    box(10, 324, 320, 48, "Being seen in the room", "Call time recorded, reason shown", "shared"),
     box(10, 400, 320, 48, "Served · No-show · Cancelled", "Visit length feeds the wait estimate", "shared"),
     arrow([[92, 58], [92, 84]]),
     arrow([[272, 58], [272, 84]]),
@@ -85,32 +85,51 @@ const overview = svg(
 );
 
 // ---- Call-next decision ----
+const line = (points) =>
+  `<path d="${points.map(([x, y], i) => `${i ? "L" : "M"}${x} ${y}`).join(" ")}" fill="none" stroke="#8f8a99" stroke-width="1.4"/>`;
+
 const callNext = svg(
   470,
-  470,
-  "Call next decision: checked in, due now, earliest target, ties to appointments",
+  628,
+  "Call next decision for one room: priority, due appointments and protected walk-ins, other due walk-ins, else the earliest upcoming",
   [
-    box(10, 10, 290, 40, "Call next pressed", [], "action"),
-    box(10, 76, 290, 48, "Anyone checked in?", "Bookings not yet arrived are left out", "decision"),
-    box(322, 76, 138, 48, "Counter stays free", "Nothing to call", "shared"),
-    box(10, 152, 290, 48, "Anyone due now?", "Target time ≤ current time", "decision"),
-    box(322, 152, 138, 60, "Call earliest", ["upcoming target;", "keeps counter busy"], "shared"),
-    box(10, 228, 290, 48, "Call earliest target", "Tie: appointment first, then lower token", "shared"),
-    box(10, 304, 290, 48, "Serving at counter", "Who was picked and why is shown", "shared"),
-    box(10, 380, 290, 48, "Recompute all waits", "Display refreshes within 3 seconds", "shared"),
+    box(10, 10, 290, 40, "A room presses Call next", [], "action"),
+    box(10, 76, 290, 48, "Nobody waiting for this service?", "Bookings not yet arrived are left out", "decision"),
+    box(322, 76, 128, 48, "Room stays free", "Nothing to call", "shared"),
+    box(10, 152, 290, 48, "A priority patient waiting?", "Flagged by staff, with a reason", "decision"),
+    box(322, 152, 128, 48, "Earliest flagged", "Elderly, Urgent, …", "shared"),
+    box(10, 228, 290, 56, "Due appointment or protected walk-in?", ["Booked time reached, or a walk-in", "who has waited 30+ min"], "decision"),
+    box(322, 232, 128, 48, "Earliest target", "of these", "shared"),
+    box(10, 312, 290, 48, "Another walk-in due?", "Target ≤ now (arrival, or +15 min hold)", "decision"),
+    box(322, 312, 128, 48, "Earliest target", "of these", "shared"),
+    box(10, 388, 290, 48, "Earliest upcoming target", "Nobody due: the room isn't left idle", "shared"),
+    box(10, 464, 290, 48, "Being seen in the room", "Who was picked and why is shown", "shared"),
+    box(10, 540, 290, 48, "Recompute waits per service", "Display refreshes within 3 seconds", "shared"),
     arrow([[155, 50], [155, 76]]),
-    arrow([[155, 124], [155, 152]]),
-    label(162, 142, "Yes"),
     arrow([[300, 100], [321, 100]]),
-    label(311, 93, "No", "middle"),
-    arrow([[155, 200], [155, 228]]),
-    label(162, 218, "Yes"),
+    label(311, 93, "Yes", "middle"),
+    arrow([[155, 124], [155, 152]]),
+    label(162, 142, "No"),
     arrow([[300, 176], [321, 176]]),
-    label(311, 169, "No", "middle"),
-    arrow([[155, 276], [155, 304]]),
-    arrow([[391, 212], [391, 328], [301, 328]]),
-    arrow([[155, 352], [155, 380]]),
-    `<text x="10" y="456" font-size="10" fill="#615a6e">For the last patient, only Served and No-show are offered: there is nobody to call next.</text>`,
+    label(311, 169, "Yes", "middle"),
+    arrow([[155, 200], [155, 228]]),
+    label(162, 218, "No"),
+    arrow([[300, 256], [321, 256]]),
+    label(311, 249, "Yes", "middle"),
+    arrow([[155, 284], [155, 312]]),
+    label(162, 302, "No"),
+    arrow([[300, 336], [321, 336]]),
+    label(311, 329, "Yes", "middle"),
+    arrow([[155, 360], [155, 388]]),
+    label(162, 378, "No"),
+    arrow([[155, 436], [155, 464]]),
+    line([[450, 176], [460, 176]]),
+    line([[450, 256], [460, 256]]),
+    line([[450, 336], [460, 336]]),
+    arrow([[460, 176], [460, 488], [301, 488]]),
+    arrow([[155, 512], [155, 540]]),
+    `<text x="10" y="606" font-size="10" fill="#615a6e">Ties: appointment first, then lower token. Staff can also Call now any waiting patient.</text>`,
+    `<text x="10" y="620" font-size="10" fill="#615a6e">For the last patient, only Served and No-show are offered.</text>`,
   ].join("\n"),
 );
 
@@ -121,7 +140,7 @@ writeFileSync(path.join(docs, "call-next-logic.svg"), callNext);
 const browser = await chromium.launch({ channel: process.env.PW_CHANNEL ?? "msedge" });
 for (const name of ["workflow-overview", "call-next-logic"]) {
   const file = path.join(docs, `${name}.svg`);
-  const page = await browser.newPage({ deviceScaleFactor: 3, viewport: { width: 470, height: 480 } });
+  const page = await browser.newPage({ deviceScaleFactor: 3, viewport: { width: 470, height: 640 } });
   await page.goto(pathToFileURL(file).href);
   await page.locator("svg").screenshot({ path: path.join(docs, `${name}.png`) });
   await page.close();

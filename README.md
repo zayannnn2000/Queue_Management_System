@@ -71,12 +71,19 @@ display stays public.
 - Testing with a PIN: run a server with `STAFF_PIN=<test pin>`, then
   `E2E_BASE_URL=<that url> E2E_STAFF_PIN=<test pin> npm run test:e2e`.
 
-## Printing token slips
+## Tokens
 
-When a walk-in is added or an appointment checks in, the front desk shows the token with a **Print token**
-button; every row in the Waiting list also has **Print** for a reprint. The slip carries the token, booking,
-service, place in line, estimated wait, the time issued and the display link for that token. It shows no
-patient name. It's laid out for an 80 mm receipt printer and prints on any printer through the browser's print dialog.
+Every patient gets a token number; it's how they're called and how they follow their place.
+
+| | |
+|---|---|
+| **Format** | `W-001`, `W-002` … for walk-ins; `A-001`, `A-002` … for appointments. Separate counters, restarting each day (Dhaka time) or on **Reset day**. |
+| **When it's issued** | A walk-in gets a W-token as soon as staff click **Add walk-in**. An appointment gets its A-token when it's booked (quote it to the patient); it joins the queue only when they **Check in**. |
+| **It never changes** | Editing a patient keeps the token. A patient who arrives more than 10 minutes late keeps their A-token but joins as a walk-in ("Late, now walk-in"). |
+| **Printing** | After **Add walk-in** or **Check in**, a card shows the token, place and wait with **Print token**; the card clears once printed. Every row in the Waiting list has **Print** for a reprint. |
+| **The slip** | Logo, the token in large type, walk-in or appointment time, service, place in line, estimated wait, time issued, and a link to follow it on the display. **No patient name.** Sized for an 80 mm receipt printer; prints on any printer through the browser's print dialog. |
+| **Being called** | Call next shows the token on the counter card with the reason it was picked, and on the waiting-room display under **Now serving**. The next two tokens appear under **Please get ready**. |
+| **Following your token** | The display lists every waiting token with its first initial, place and wait. Open `/display?token=W-004`, or type the token into **Find my token**, to highlight that row with a plain message such as "You are number 2 in line" or "It's your turn. Please go to counter 1." |
 
 ## Workflow
 

@@ -12,7 +12,7 @@ export default function DisplayPage({ searchParams }: PageProps<"/display">) {
     <Suspense
       fallback={
         <div className="px-4 py-6 md:px-10 md:py-8" aria-busy="true">
-          <h1 className="text-2xl font-semibold md:text-[32px] md:leading-10">Nilgiri Lane Clinic · Queue</h1>
+          <h1 className="text-2xl font-bold tracking-[-0.01em] md:text-[32px] md:leading-10">Hygieia Wellness Clinic</h1>
         </div>
       }
     >

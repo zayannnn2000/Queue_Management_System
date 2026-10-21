@@ -23,8 +23,8 @@ export function NavLinks({ className, variant }: { className?: string; variant: 
             href={link.href}
             aria-current={active ? "page" : undefined}
             target={external ? "_blank" : undefined}
-            className={`flex h-8 items-center gap-2 rounded-md px-2 text-sm transition-colors hover:bg-active ${
-              active ? "bg-active font-medium text-ink" : "text-muted"
+            className={`flex h-9 items-center gap-2 rounded-full px-3 text-sm transition-colors hover:bg-active ${
+              active ? "bg-surface font-semibold text-ink" : "text-muted"
             }`}
           >
             {compact ? link.short : link.label}

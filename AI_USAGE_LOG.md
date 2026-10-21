@@ -95,6 +95,19 @@ proposed and what was corrected. Model: Claude (Opus) in Claude Code. Dates: 21 
   documentation PDF.
 - The documentation's worked example was added as a unit test, so its numbers come from the real code (29/29).
 
+## 10. Restyle and rename
+- **Prompt:** make the interface cleaner, calmer and "chic", rename it to Hygieia Wellness Clinic, use
+  lavender/lilac, and keep the black and white buttons.
+- **Changes:**
+  - new design tokens: lavender ground, lilac data hue (`#7656a6`), lilac on the black display panel
+  - Manrope for text and DM Mono for tokens
+  - pill buttons and tags, 20px cards
+  - a new mark based on the Bowl of Hygieia
+  - a stronger "Late, now walk-in" label (I'd found the old one hard to spot)
+- No layout or queue logic changed.
+- **Note:** the design skill bans violet/indigo palettes by default; lilac was used because I asked for it explicitly.
+- **Tested by:** the design inspector at 1440, 768 and 390px (0 failures); 29/29 Vitest; 3/3 Playwright.
+
 ## Things Claude did not do (by design)
 - It did not enter credentials. GitHub and Vercel sign-ins and the Upstash terms were completed by me.
 - It did not invent customers, reviews or statistics. All names are fictional.

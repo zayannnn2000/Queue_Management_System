@@ -12,7 +12,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <>
     <a
       href="#main"
-      className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-sm text-white focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
+      className="sr-only z-50 rounded-full bg-primary px-3 py-2 text-sm text-white focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
     >
       Skip to content
     </a>
@@ -44,22 +44,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 function ProductMark() {
   return (
-    <Link href="/staff" className="flex items-center gap-2.5 rounded-md px-2 py-1">
-      <TokenMark />
+    <Link href="/staff" className="flex items-center gap-2.5 rounded-full px-2 py-1">
+      <HygieiaMark />
       <span className="leading-tight">
-        <span className="block text-sm font-semibold whitespace-nowrap">Nilgiri Lane Clinic</span>
-        <span className="block text-xs text-muted max-[1099px]:hidden">Queue · Front desk</span>
+        <span className="block text-base font-bold tracking-[-0.01em] whitespace-nowrap">Hygieia</span>
+        <span className="block text-xs whitespace-nowrap text-muted max-[1099px]:sr-only">Wellness Clinic</span>
       </span>
     </Link>
   );
 }
 
-/** The product's mark: a ticket stub with a punched notch, in the clinic teal. */
-function TokenMark() {
+/** The product's mark: the Bowl of Hygieia, a cup with a fresh sprout, white on a lilac disc. */
+export function HygieiaMark({ size = 30 }: { size?: number }) {
   return (
-    <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true" className="flex-none">
-      <path d="M4 6h20v6a2 2 0 0 0 0 4v6H4v-6a2 2 0 0 0 0-4z" fill="var(--accent)" />
-      <path d="M10 11h8M10 14h5M10 17h7" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+    <svg width={size} height={size} viewBox="0 0 28 28" aria-hidden="true" className="flex-none">
+      <circle cx="14" cy="14" r="14" fill="var(--accent)" />
+      <path d="M14 11.2c0-3 1.8-4.9 4.7-5.1 0 2.9-1.8 4.9-4.7 5.1z" fill="#fff" />
+      <path d="M8 12.6h12a6 6 0 0 1-12 0z" fill="#fff" />
+      <path d="M14 18.6v2.8M11.2 21.6h5.6" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }

@@ -17,7 +17,7 @@ export function CustomerForm() {
   return (
     <Panel title="Add patient" id="add-heading">
       <div className="px-5 pb-5">
-        <div role="group" aria-label="Booking type" className="inline-flex rounded-md bg-raised p-0.5">
+        <div role="group" aria-label="Booking type" className="inline-flex rounded-full bg-active p-1">
           {(
             [
               ["walk_in", "Walk-in"],
@@ -29,8 +29,8 @@ export function CustomerForm() {
               type="button"
               aria-pressed={kind === id}
               onClick={() => setKind(id)}
-              className={`h-8 rounded-[5px] border px-3 text-sm transition-colors ${
-                kind === id ? "border-border bg-surface font-medium text-ink" : "border-transparent text-muted hover:text-ink"
+              className={`h-8 rounded-full px-4 text-sm transition-colors ${
+                kind === id ? "bg-primary font-semibold text-white" : "text-muted hover:text-ink"
               }`}
             >
               {label}

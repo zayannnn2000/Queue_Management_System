@@ -89,7 +89,7 @@ test("/display reflects every staff change", async ({ page, context }) => {
   page.on("dialog", (d) => d.accept());
   const display = await context.newPage();
   await display.goto("/display?token=W-002");
-  await expect(display.getByRole("heading", { level: 1 })).toContainText("Queue");
+  await expect(display.getByRole("heading", { level: 1 })).toContainText("Hygieia Wellness Clinic");
   await expect(display.getByText(/isn't waiting right now/)).toBeVisible();
 
   await page.goto("/staff");

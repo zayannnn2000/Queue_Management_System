@@ -61,7 +61,7 @@ export function CallStrip() {
             return (
               <li key={c.counter} className="flex items-center">
                 <span className="w-20 flex-none text-xs text-muted">Counter {c.counter}</span>
-                <div ref={i === 0 ? laneRef : undefined} className="relative h-8 flex-1 rounded bg-raised">
+                <div ref={i === 0 ? laneRef : undefined} className="relative h-8 flex-1 rounded-full bg-raised">
                   {ticks.map((t) => (
                     <span
                       key={t}
@@ -115,13 +115,13 @@ function Bar({
   label: string;
   title: string;
 }) {
-  const toneClass =
-    tone === "serving" ? "bg-active text-ink" : "border-l-2 border-accent bg-accent-pale text-accent";
+  const toneClass = tone === "serving" ? "bg-primary text-white" : "bg-accent-pale text-accent";
   return (
     <span
       title={title}
-      className={`absolute top-1 flex h-6 items-center overflow-hidden rounded-[3px] px-1 font-mono text-xs font-medium whitespace-nowrap ${toneClass}`}
-      style={{ left, width }}
+      className={`absolute top-1 flex h-6 items-center overflow-hidden rounded-full px-2 font-mono text-xs font-medium whitespace-nowrap ${toneClass}`}
+      // A 3px gap keeps neighbouring pills apart.
+      style={{ left, width: `max(0px, calc(${width} - 3px))` }}
     >
       <span className="sr-only">{title}</span>
       <span aria-hidden="true">{label}</span>

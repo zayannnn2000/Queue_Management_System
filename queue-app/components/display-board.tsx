@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import type { PublicRow, PublicView } from "@/lib/queue";
 import { DEFAULT_SETTINGS } from "@/lib/queue";
 import { formatClock } from "@/lib/time";
+import { HygieiaMark } from "./app-shell";
 import { POLL_MS } from "./queue-provider";
 
 const MAX_ROWS = 10;
@@ -44,7 +45,10 @@ export function DisplayBoard({ initial, highlight }: { initial: PublicView; high
   return (
     <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col px-4 py-6 md:px-10 md:py-8">
       <header className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
-        <h1 className="text-2xl font-semibold md:text-[32px] md:leading-10">Nilgiri Lane Clinic · Queue</h1>
+        <h1 className="flex items-center gap-3 text-2xl font-bold tracking-[-0.01em] md:text-[32px] md:leading-10">
+          <HygieiaMark size={36} />
+          Hygieia Wellness Clinic
+        </h1>
         <p className="num text-lg text-muted md:ml-auto">
           {formatClock(view.now, DEFAULT_SETTINGS.timezone)} · Updated every 3 seconds
           {stale ? <span className="ml-2 text-warn-ink">(reconnecting)</span> : null}
@@ -57,7 +61,7 @@ export function DisplayBoard({ initial, highlight }: { initial: PublicView; high
 
       <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <section aria-labelledby="serving-heading" className="rounded-2xl bg-ink p-6 text-white md:p-8">
-          <h2 id="serving-heading" className="text-xl font-medium text-white/80 md:text-2xl">
+          <h2 id="serving-heading" className="text-xl font-semibold text-accent-soft md:text-2xl">
             Now serving
           </h2>
           <ul className="mt-6 flex flex-col gap-6" aria-live="polite">
@@ -67,7 +71,7 @@ export function DisplayBoard({ initial, highlight }: { initial: PublicView; high
                 {c.token ? (
                   <span translate="no" className="font-mono text-5xl font-medium whitespace-nowrap sm:text-6xl xl:text-8xl">
                     {c.token}
-                    <span className="ml-3 font-sans text-3xl text-white/80 md:text-4xl">{c.initial}</span>
+                    <span className="ml-3 font-sans text-3xl text-accent-soft md:text-4xl">{c.initial}</span>
                   </span>
                 ) : (
                   <span className="text-3xl text-white/70 md:text-4xl">Free</span>
@@ -77,7 +81,7 @@ export function DisplayBoard({ initial, highlight }: { initial: PublicView; high
           </ul>
           {view.waiting.length > 0 ? (
             <div className="mt-8 border-t border-white/15 pt-6">
-              <h3 className="text-lg text-white/80 md:text-xl">Please get ready</h3>
+              <h3 className="text-lg font-semibold text-accent-soft md:text-xl">Please get ready</h3>
               <p translate="no" className="mt-2 flex flex-wrap gap-x-6 gap-y-1 font-mono text-3xl font-medium md:text-4xl">
                 {view.waiting.slice(0, 2).map((w) => (
                   <span key={w.token}>{w.token}</span>
@@ -186,9 +190,9 @@ function FindToken({ current }: { current: string | null }) {
         placeholder="W-004…"
         autoComplete="off"
         spellCheck={false}
-        className="h-10 w-32 rounded-md border border-control bg-surface px-3 font-mono text-base text-ink uppercase"
+        className="h-10 w-32 rounded-full border border-control bg-surface px-4 font-mono text-base text-ink uppercase"
       />
-      <button type="submit" className="h-10 rounded-md bg-primary px-4 text-base font-medium text-white hover:bg-black">
+      <button type="submit" className="h-10 rounded-full bg-primary px-5 text-base font-semibold text-white hover:bg-black">
         Show
       </button>
     </form>

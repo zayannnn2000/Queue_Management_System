@@ -1,30 +1,32 @@
 @import "tailwindcss";
 
-/* Framed-sheet app style (tasteskill, seed 1402706175). The frame is tinted a clinic green-grey;
-   the sheet stays white; the one data hue (clinic teal) marks the call order and the selected state. */
+/* Framed-sheet app style (tasteskill, seed 1402706175), restyled for Hygieia Wellness Clinic:
+   a lavender frame, a white sheet, lilac as the one data hue (call order, selected state),
+   black-and-white buttons. Soft shape: pill controls, 20px cards. */
 :root {
-  --ground: #f1f5f4;
+  --ground: #f4f1fa;
   --surface: #ffffff;
-  --raised: #f4f6f8;
-  --active: #e6ebea;
-  --border: #e8eaec;
-  --rule: #f0f1f2;
-  --control: #cdced1;
-  --text: #131416;
-  --muted: #5d5f60;
-  --primary: #1d1f20;
-  --accent: #1b6c80;
-  --accent-pale: #e3f0f3;
+  --raised: #f8f6fc;
+  --active: #ece6f7;
+  --border: #e8e2f2;
+  --rule: #f1edf7;
+  --control: #d4cce3;
+  --text: #17141f;
+  --muted: #615a6e;
+  --primary: #111014;
+  --accent: #7656a6;
+  --accent-pale: #efe8fa;
+  --accent-soft: #b99ce8; /* lilac text on the black display panel (7.6:1) */
   --positive: #1e7b4f;
   --negative: #c4242a;
   --pill-positive-bg: #dcfae5;
   --pill-positive-ink: #04250e;
   --pill-negative-bg: #ffedea;
   --pill-negative-ink: #831c1e;
-  --pill-warning-bg: #fffbeb;
-  --pill-warning-ink: #92400e;
-  --pill-neutral-bg: #ebedee;
-  --pill-neutral-ink: #353736;
+  --pill-warning-bg: #fdefd3;
+  --pill-warning-ink: #7a3f00;
+  --pill-neutral-bg: #efecf3;
+  --pill-neutral-ink: #3b3645;
 }
 
 @theme inline {
@@ -40,6 +42,7 @@
   --color-primary: var(--primary);
   --color-accent: var(--accent);
   --color-accent-pale: var(--accent-pale);
+  --color-accent-soft: var(--accent-soft);
   --color-positive: var(--positive);
   --color-negative: var(--negative);
   --color-ok-bg: var(--pill-positive-bg);
@@ -50,8 +53,12 @@
   --color-warn-ink: var(--pill-warning-ink);
   --color-neutral-bg: var(--pill-neutral-bg);
   --color-neutral-ink: var(--pill-neutral-ink);
-  --font-sans: var(--font-plex-sans), system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+  --font-sans: var(--font-manrope), system-ui, sans-serif;
+  --font-mono: var(--font-dm-mono), ui-monospace, monospace;
+  /* Soft radii: controls and tiles, cards, the sheet and the display panels. */
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-2xl: 28px;
 }
 
 html {
@@ -68,7 +75,7 @@ input {
 }
 
 body {
-  font-family: var(--font-plex-sans), system-ui, sans-serif;
+  font-family: var(--font-manrope), system-ui, sans-serif;
   font-size: 14px;
   line-height: 20px;
 }

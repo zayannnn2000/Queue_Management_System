@@ -3,7 +3,7 @@
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement>;
 
 const base =
-  "inline-flex h-8 flex-none items-center justify-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-[background-color,color,transform] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex h-9 flex-none items-center justify-center gap-1.5 rounded-full px-4 text-sm font-semibold whitespace-nowrap transition-[background-color,color,transform] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60";
 
 export function PrimaryButton({ className = "", ...props }: ButtonProps) {
   return <button {...props} className={`${base} bg-primary text-white hover:bg-black ${className}`} />;
@@ -22,7 +22,7 @@ export function TextButton({ className = "", ...props }: ButtonProps) {
   return (
     <button
       {...props}
-      className={`${base} h-7 px-2 text-ink hover:bg-active ${className}`}
+      className={`${base} h-8 px-3 text-ink hover:bg-active ${className}`}
     />
   );
 }
@@ -31,12 +31,12 @@ export function DangerTextButton({ className = "", ...props }: ButtonProps) {
   return (
     <button
       {...props}
-      className={`${base} h-7 px-2 text-negative hover:bg-bad-bg ${className}`}
+      className={`${base} h-8 px-3 text-negative hover:bg-bad-bg ${className}`}
     />
   );
 }
 
-const pillBase = "inline-flex h-5 flex-none items-center rounded px-1.5 text-xs font-medium whitespace-nowrap";
+const pillBase = "inline-flex h-6 flex-none items-center rounded-full px-2.5 text-xs font-semibold whitespace-nowrap";
 
 export const Pill = {
   Neutral: ({ children }: { children: React.ReactNode }) => (

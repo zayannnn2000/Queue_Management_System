@@ -1,6 +1,6 @@
 # Token-based clinic queue
 
-A queue for walk-ins and appointments at a small clinic (fictional "Nilgiri Lane Clinic"). Staff add
+A queue for walk-ins and appointments at a small clinic (the demo "Hygieia Wellness Clinic"). Staff add
 patients, call the next one and see estimated waits; patients follow their place on a public display.
 
 - **Live app:** https://queue-management-system-jet-six.vercel.app

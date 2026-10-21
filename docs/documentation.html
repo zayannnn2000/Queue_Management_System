@@ -2,109 +2,148 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Token-Based Clinic Queue: Design Documentation</title>
+<title>Hygieia Wellness Clinic Queue: Design Documentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  @page { size: A4; margin: 16mm 16mm 14mm; }
-  :root { --ink: #131416; --muted: #5d5f60; --rule: #dfe3e6; --accent: #1b6c80; --tint: #f1f5f4; }
+  @page { size: A4; margin: 15mm 16mm 14mm; }
+  :root { --ink: #17141f; --muted: #615a6e; --rule: #e8e2f2; --accent: #7656a6; --pale: #f4f1fa; }
   * { box-sizing: border-box; }
-  body { font: 9.6pt/1.42 "Segoe UI", "IBM Plex Sans", system-ui, sans-serif; color: var(--ink); margin: 0; }
-  h1 { font-size: 16pt; line-height: 1.15; margin: 0 0 2pt; }
-  .sub { color: var(--muted); margin: 0 0 8pt; font-size: 9pt; }
-  h2 { font-size: 11pt; margin: 10pt 0 3pt; color: var(--accent); }
+  body { font: 9.3pt/1.45 "Manrope", "Segoe UI", system-ui, sans-serif; color: var(--ink); margin: 0; }
+  .serif { font-family: "Cormorant Garamond", Georgia, serif; }
+  header { display: flex; align-items: center; gap: 12pt; padding-bottom: 8pt; border-bottom: 1.2pt solid var(--accent); }
+  header h1 { font: 700 21pt/1.05 "Cormorant Garamond", Georgia, serif; margin: 0; letter-spacing: -0.01em; }
+  header p { margin: 2pt 0 0; color: var(--muted); font-size: 8.8pt; }
+  .meta { display: grid; grid-template-columns: auto 1fr; gap: 1pt 10pt; margin: 7pt 0 0; font-size: 8.5pt; }
+  .meta dt { color: var(--muted); }
+  .meta dd { margin: 0; }
+  h2 { font: 700 13.5pt/1.1 "Cormorant Garamond", Georgia, serif; color: var(--accent); margin: 11pt 0 3pt; }
+  h3 { font-size: 9.3pt; margin: 6pt 0 2pt; }
   p { margin: 0 0 4pt; }
-  ul, ol { margin: 0 0 4pt; padding-left: 14pt; }
-  li { margin: 0 0 1.5pt; }
-  table { border-collapse: collapse; width: 100%; margin: 2pt 0 5pt; font-size: 9pt; }
-  th, td { text-align: left; padding: 2.5pt 5pt; border-bottom: 0.6pt solid var(--rule); vertical-align: top; }
+  ul, ol { margin: 0 0 4pt; padding-left: 13pt; }
+  li { margin: 0 0 1.6pt; }
+  li::marker { color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; margin: 3pt 0 5pt; font-size: 8.8pt; }
+  th, td { text-align: left; padding: 2.6pt 6pt; border-bottom: 0.6pt solid var(--rule); vertical-align: top; }
   th { color: var(--muted); font-weight: 600; }
   td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
-  code { font: 8.6pt "Cascadia Mono", Consolas, monospace; }
-  .formula { background: var(--tint); padding: 5pt 7pt; border-radius: 4pt; margin: 3pt 0 5pt; }
-  .links { font-size: 8.8pt; }
-  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14pt; }
+  code { font: 600 8.6pt "Manrope", sans-serif; background: var(--pale); padding: 0 3pt; border-radius: 3pt; white-space: nowrap; }
+  .box { background: var(--pale); border-radius: 6pt; padding: 6pt 9pt; margin: 4pt 0 6pt; }
+  .box p { margin: 0 0 2.5pt; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16pt; }
+  .tok { font-weight: 700; white-space: nowrap; }
+  .keep { break-inside: avoid; }
+  .figs { display: grid; grid-template-columns: 1fr 1fr; gap: 14pt; margin: 6pt 0 4pt; }
+  figure { margin: 0; }
+  figure img { display: block; width: 100%; height: auto; }
+  figcaption { margin-top: 3pt; font-size: 8pt; color: var(--muted); text-align: center; }
 </style>
 </head>
 <body>
 
-<h1>Token-Based Clinic Queue: Design Documentation</h1>
-<p class="sub">A queue for walk-ins and appointments at a fictional clinic. All patient data is fictional.</p>
-<p class="links"><b>Live app:</b> https://queue-management-system-jet-six.vercel.app (staff <code>/staff</code>, display <code>/display</code>) ·
-<b>Source:</b> https://github.com/zayannnn2000/Queue_Management_System · <b>Host:</b> Vercel, with Upstash Redis for shared state.</p>
+<header>
+  <svg width="46" height="46" viewBox="0 0 40 40" aria-hidden="true">
+    <path d="M20 13.5c0-4.4 2.6-7.4 7-7.8 0 4.3-2.6 7.4-7 7.8z" fill="#b99ce8"/>
+    <path d="M20 13.5c0-3.3-1.9-5.5-5.2-5.8 0 3.2 1.9 5.5 5.2 5.8z" fill="#b99ce8" opacity="0.7"/>
+    <path d="M9.5 17h21a10.5 10.5 0 0 1-21 0z" fill="#7656a6"/>
+    <path d="M25.5 17c2.2-1.8 2.4-4 .6-5.2" fill="none" stroke="#7656a6" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M20 27.5v4.5M14.5 33.5h11" stroke="#7656a6" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+  <div>
+    <h1>Hygieia Wellness Clinic: Token Queue</h1>
+    <p>Design documentation: decisions, assumptions, queue handling and waiting-time calculation</p>
+  </div>
+</header>
+<dl class="meta">
+  <dt>Live app</dt><dd>https://queue-management-system-jet-six.vercel.app (front desk <code>/staff</code>, demo PIN <code>12345</code>; waiting-room display <code>/display</code>)</dd>
+  <dt>Source</dt><dd>https://github.com/zayannnn2000/Queue_Management_System</dd>
+  <dt>Stack</dt><dd>Next.js 16 and TypeScript on Vercel; shared state in Upstash Redis. A simulation: all patients are fictional.</dd>
+</dl>
 
 <h2>1. Key design decisions</h2>
 <ul>
-  <li><b>One ordering key, the target time.</b> Every waiting patient has a single comparable time, so "fair and in order" and
-    "appointments at their scheduled time" become one rule instead of two competing queues.</li>
-  <li><b>Appointments join the queue only when they check in.</b> A booking that hasn't arrived can never hold up patients who are present.</li>
-  <li><b>All queue logic is one pure module</b> (<code>lib/queue.ts</code>): no I/O, and the clock is always passed in. Every staff action goes through a
-    single reducer that the server runs, so the 29 unit tests (including this document's worked example) cover exactly the code the live app uses.</li>
-  <li><b>The server decides who is next</b> and writes with a compare-and-set on a version number (a Lua script on Redis), so two staff
-    pressing "Call next" at once can never call the same patient.</li>
-  <li><b>The wait estimate replays the call-next rule</b> rather than using a separate formula, so the estimate and the actual order cannot disagree.</li>
-  <li><b>Explained decisions.</b> Every call shows who was picked and why (e.g. "A-003 called: appointment at 10:30, the earliest due target").</li>
-  <li><b>Privacy on the public screen.</b> The display endpoint only ever sends the token and first initial; full names never leave the staff view.</li>
-  <li><b>Polling every 3 s</b> (Next.js API routes on Vercel) instead of WebSockets: simple and robust on serverless, at the cost of up to 3 s lag.</li>
+  <li><b>One ordering key: the target time.</b> Every waiting patient has one comparable time, so "fair and in order" and
+    "appointments at their scheduled time" become a single rule instead of two competing queues.</li>
+  <li><b>Appointments join the queue only at check-in.</b> A booking that hasn't arrived can never hold up patients who are present.</li>
+  <li><b>All queue logic is one pure, tested module</b> (<code>lib/queue.ts</code>): no I/O, and the clock is always passed in. Every staff
+    action goes through a single reducer that the server runs, so the unit tests cover exactly the code the live app uses.</li>
+  <li><b>The server decides who is next</b> and writes with a compare-and-set on a version number, so two staff pressing "Call next"
+    at the same moment can never call the same patient.</li>
+  <li><b>The wait estimate replays the call-next rule</b> instead of using a separate formula, so the estimate and the real order can't disagree.</li>
+  <li><b>Every call is explained</b> on screen, e.g. "A-003 called: appointment at 10:30, the earliest due target".</li>
+  <li><b>Privacy by design.</b> The public display and the printed token slip show only the token (and the first initial on the display);
+    full names never leave the staff view. Only a name and a service are collected.</li>
+  <li><b>Staff access with one shared PIN</b>: a signed 12-hour session cookie, a lock-out after 5 wrong tries, and checks in both the proxy
+    and every staff API route. The waiting-room display stays public.</li>
+  <li><b>Polling every 3 s</b> instead of WebSockets: simple and robust on serverless hosting, at the cost of up to 3 s of delay.</li>
 </ul>
 
 <h2>2. Assumptions</h2>
 <div class="cols">
 <ul>
-  <li>One clinic, timezone Asia/Dhaka; tokens <code>W-001…</code> / <code>A-001…</code> restart daily.</li>
-  <li>1 counter by default (1–4); any counter serves any patient.</li>
-  <li>Grace period 10 min (configurable).</li>
-  <li>Default durations: consultation 15, follow-up 10, blood test 5, vaccination 5, prescription renewal 5 min.</li>
-  <li>Bookings are for today only, in 5-minute slots, at or after the current time.</li>
+  <li>One clinic, timezone Asia/Dhaka. Tokens <code>W-001</code> / <code>A-001</code> restart each day.</li>
+  <li>1 counter by default (configurable 1–4); any counter serves any patient.</li>
+  <li>Grace period: 10 min (configurable).</li>
+  <li>Default visit lengths: consultation 15, follow-up 10, blood test 5, vaccination 5, prescription renewal 5 min.</li>
 </ul>
 <ul>
+  <li>Bookings are for today, in 5-minute slots, at or after the current time.</li>
   <li>No double-booking: overlapping appointments may not exceed the number of counters.</li>
-  <li>No automatic no-shows: overdue bookings are flagged for staff to decide.</li>
-  <li>A called patient who doesn't come is a no-show; if they return, they re-join as a new walk-in.</li>
-  <li>Only a name and a service are collected. No login, payments or SMS.</li>
+  <li>No automatic no-shows: staff decide on overdue bookings.</li>
+  <li>A no-show who returns joins again as a new walk-in. No payments or SMS.</li>
 </ul>
 </div>
 
 <h2>3. Queue-handling logic</h2>
-<table>
+<table class="keep">
   <tr><th>Patient</th><th>Target time</th></tr>
   <tr><td>Walk-in</td><td>Arrival time</td></tr>
   <tr><td>Appointment, checked in by scheduled time + grace (on time or early)</td><td>Scheduled time</td></tr>
-  <tr><td>Appointment, checked in after the grace period</td><td>Arrival time: converted to a walk-in, keeps its A-token, flagged in the UI</td></tr>
+  <tr><td>Appointment, checked in after the grace period</td><td>Arrival time: joins as a walk-in, keeps its A-token, flagged "Late, now walk-in"</td></tr>
 </table>
-<p><b>Call next</b> (per counter):</p>
-<ol>
-  <li>Nobody checked in → the counter stays free.</li>
-  <li>Someone is <b>due</b> (target ≤ now) → call the earliest target.</li>
-  <li>Nobody due → call the earliest <b>upcoming</b> target, so the counter isn't idle (the only way an early appointment is seen early).</li>
-  <li>Ties → appointment before walk-in, then the lower token number.</li>
-</ol>
-<p>Close-out is <i>Served</i>, <i>No-show</i> or <i>Served &amp; call next</i>. Waiting or booked patients can be cancelled or edited until they are called.</p>
+<p><b>Call next</b> (per counter): (1) nobody checked in → the counter stays free; (2) someone is <b>due</b> (target ≤ now) → call the
+earliest target; (3) nobody due → call the earliest <b>upcoming</b> target so the counter isn't idle, the only way an early appointment is
+seen early; (4) ties → appointment first, then the lower token number. A booking past its grace period without arriving is flagged
+<i>Overdue</i> for staff to check in, mark a no-show or cancel. Edits are allowed until a patient is called.</p>
+<div class="figs keep">
+  <figure>
+    <img src="workflow-overview.svg" alt="Workflow: walk-ins get a printed W-token with target = arrival; appointments are booked, then check in and get a printed A-token (over 10 minutes late becomes a walk-in; never arriving is flagged overdue). Both join one waiting queue sorted by target time, shown on the public display. Staff call next from the PIN-protected front desk; the patient is served at the counter, then closed out as served, no-show or cancelled, and the visit length updates the wait estimates.">
+    <figcaption>Figure 1. Patient workflow</figcaption>
+  </figure>
+  <figure>
+    <img src="call-next-logic.svg" alt="Call-next decision: if nobody is checked in the counter stays free; if someone is due, call the earliest target (ties: appointment first, then lower token); otherwise call the earliest upcoming target. The patient is served at the counter with the reason shown, then all waits are recomputed and the display refreshes within 3 seconds.">
+    <figcaption>Figure 2. Call-next decision</figcaption>
+  </figure>
+</div>
 
 <h2>4. Waiting-time calculation</h2>
-<div class="formula">
-  <b>Expected duration</b>(service) = mean of the last 5 served visits (called → served), each clamped to [1 min, 3 × default]; none yet → default.<br>
-  <b>Counter free at</b> = now if idle, else now + max(expected − elapsed, 1 min).<br>
-  <b>Simulation:</b> repeatedly take the counter free first (time <i>t</i>), apply the call-next rule at <i>t</i>, start that patient at <i>t</i>,
-  and mark the counter free at <i>t</i> + expected. &nbsp;<b>wait = start − now</b>; position = order in the projection.<br>
-  <b>Shown as</b> "Due now" when ≤ 2 min, else "~X min" rounded <i>up</i> to the next 5.
+<div class="box keep">
+  <p><b>Expected visit length</b> (per service) = mean of the last 5 served visits (called → served), each clamped to 1 min … 3 × the default.
+    Before any data exists, the default is used. No-shows and cancellations never count.</p>
+  <p><b>Each counter is free at</b> now if idle, otherwise now + max(expected − elapsed, 1 min).</p>
+  <p><b>Forward simulation:</b> repeatedly take the counter that frees up first (time <i>t</i>), apply the same call-next rule at <i>t</i>,
+    start that patient at <i>t</i>, and mark the counter free again at <i>t</i> + expected. <b>Wait = start − now</b>; the patient's position is their order in this projection.</p>
+  <p><b>Shown as</b> "Due now" when ≤ 2 min, otherwise "~X min" rounded <i>up</i> to the next 5. Recomputed after every action and every 3-second refresh.</p>
 </div>
-<p><b>Worked example</b>: 1 counter, now 10:00, the patient being served is expected to finish at 10:06, and no visit data yet.</p>
-<table>
-  <tr><th>Patient</th><th>Target</th><th>Service</th><th class="n">Projected start</th><th class="n">Wait</th><th>Shown</th></tr>
-  <tr><td>W-001 walk-in</td><td>09:50</td><td>Consultation 15</td><td class="n">10:06</td><td class="n">6 min</td><td>~10 min</td></tr>
-  <tr><td>W-002 walk-in</td><td>09:58</td><td>Vaccination 5</td><td class="n">10:21</td><td class="n">21 min</td><td>~25 min</td></tr>
-  <tr><td>A-001 appointment, checked in early</td><td>10:05</td><td>Follow-up 10</td><td class="n">10:26</td><td class="n">26 min</td><td>~30 min</td></tr>
+<p class="keep"><b>Worked example</b> (also a unit test): 1 counter, now 10:00, the patient being served is expected to finish at 10:06, and no visit data yet.</p>
+<table class="keep">
+  <tr><th>Patient</th><th>Target</th><th>Service</th><th class="n">Projected start</th><th class="n">Wait</th><th class="n">Shown</th></tr>
+  <tr><td><span class="tok">W-001</span> walk-in</td><td>09:50</td><td>Consultation (15)</td><td class="n">10:06</td><td class="n">6 min</td><td class="n">~10 min</td></tr>
+  <tr><td><span class="tok">W-002</span> walk-in</td><td>09:58</td><td>Vaccination (5)</td><td class="n">10:21</td><td class="n">21 min</td><td class="n">~25 min</td></tr>
+  <tr><td><span class="tok">A-001</span> appointment, checked in early</td><td>10:05</td><td>Follow-up (10)</td><td class="n">10:26</td><td class="n">26 min</td><td class="n">~30 min</td></tr>
 </table>
-<p>A-001 does not overtake the two walk-ins, because they have earlier targets. Had W-002 arrived at 10:08 instead, A-001 (target 10:05) would be called first at 10:21.
-As visits finish, their real durations replace the defaults and every wait is recomputed.</p>
+<p>A-001 doesn't overtake the two walk-ins, because they have earlier targets. Had W-002 arrived at 10:08 instead, A-001 (target 10:05) would be called first, at 10:21.</p>
 
 <h2>5. Trade-offs and limitations</h2>
 <ul>
-  <li>When an appointment comes due, a walk-in who arrived after its slot may wait about one extra service. In return, appointments
-    are honoured and nobody is overtaken by a later target. Early appointments do not jump the queue; late ones lose their slot.</li>
-  <li>Idle-fill keeps counters busy but can leave a counter occupied just as a later slot comes due. The estimate already includes this.</li>
-  <li>The overlap check counts every booking in the window, so it can refuse a slot that would just fit with 2+ counters. It's simple to explain to patients.</li>
-  <li>Estimates, not promises: they converge as real durations accumulate, and the averaging dampens one unusually long visit.</li>
-  <li><b>Limitations:</b> <code>/staff</code> has no login; one queue per deployment; without Redis (local dev) state lives in one process's memory.</li>
+  <li>When an appointment comes due, a walk-in who arrived after its slot may wait about one extra visit. In return, appointments are honoured
+    and nobody is overtaken by a later target. Early appointments don't jump the queue; late ones lose their slot.</li>
+  <li>Idle-fill keeps counters busy, but can leave a counter occupied just as a later slot comes due. The estimate already includes this.</li>
+  <li>The overlap check counts every booking in the window, so with 2+ counters it can refuse a slot that would just fit. It's simple to explain to patients.</li>
+  <li>Waits are estimates, not promises: they converge as real visit lengths accumulate, and averaging softens one unusually long visit.</li>
+  <li><b>Limitations:</b> one shared PIN rather than individual staff accounts (no record of who pressed a button); one queue per deployment;
+    without Redis (local development) the queue lives in one server process's memory.</li>
 </ul>
 
 </body>

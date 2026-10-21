@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 470 458" width="470" height="458" role="img" aria-label="Hygieia queue workflow: walk-ins and appointments join one queue by target time" font-family="Manrope, 'Segoe UI', Arial, sans-serif">
+<title>Hygieia queue workflow: walk-ins and appointments join one queue by target time</title>
+<defs><marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1 L9 5 L0 9 z" fill="#8f8a99"/></marker></defs>
+<rect width="470" height="458" fill="#ffffff"/>
+<rect x="10" y="10" width="165" height="48" rx="12" fill="#f4f2f7" stroke="#d8d2e1" stroke-width="1"/><text x="92.5" y="32.25" text-anchor="middle" font-size="12" font-weight="700" fill="#17141f">Walk-in arrives</text><text x="92.5" y="45.25" text-anchor="middle" font-size="10" fill="#615a6e">Staff add name and service</text>
+<rect x="190" y="10" width="165" height="48" rx="12" fill="#efe8fa" stroke="#c4b0e6" stroke-width="1"/><text x="272.5" y="32.25" text-anchor="middle" font-size="12" font-weight="700" fill="#3f2c63">Appointment booked</text><text x="272.5" y="45.25" text-anchor="middle" font-size="10" fill="#6a5591">A-token, not queued yet</text>
+<rect x="374" y="10" width="86" height="48" rx="12" fill="#ffffff" stroke="#b9a3dd" stroke-width="1" stroke-dasharray="4 3"/><text x="417" y="26" text-anchor="middle" font-size="12" font-weight="700" fill="#3f2c63">No arrival?</text><text x="417" y="39" text-anchor="middle" font-size="10" fill="#6a5591">Overdue:</text><text x="417" y="52" text-anchor="middle" font-size="10" fill="#6a5591">staff decide</text>
+<rect x="10" y="84" width="165" height="56" rx="12" fill="#f4f2f7" stroke="#d8d2e1" stroke-width="1"/><text x="92.5" y="110.25" text-anchor="middle" font-size="12" font-weight="700" fill="#17141f">W-token printed</text><text x="92.5" y="123.25" text-anchor="middle" font-size="10" fill="#615a6e">Target = arrival time</text>
+<rect x="190" y="84" width="165" height="56" rx="12" fill="#efe8fa" stroke="#c4b0e6" stroke-width="1"/><text x="272.5" y="104" text-anchor="middle" font-size="12" font-weight="700" fill="#3f2c63">Checks in on arrival</text><text x="272.5" y="117" text-anchor="middle" font-size="10" fill="#6a5591">A-token printed;</text><text x="272.5" y="130" text-anchor="middle" font-size="10" fill="#6a5591">over 10 min late → walk-in</text>
+<rect x="10" y="168" width="320" height="52" rx="12" fill="#ffffff" stroke="#ddd5ea" stroke-width="1"/><text x="170" y="192.25" text-anchor="middle" font-size="12" font-weight="700" fill="#17141f">Waiting queue</text><text x="170" y="205.25" text-anchor="middle" font-size="10" fill="#615a6e">One line, sorted by target time</text>
+<rect x="346" y="168" width="114" height="52" rx="12" fill="#ffffff" stroke="#ddd5ea" stroke-width="1"/><text x="403" y="186" text-anchor="middle" font-size="12" font-weight="700" fill="#17141f">Public display</text><text x="403" y="199" text-anchor="middle" font-size="10" fill="#615a6e">Token, initial,</text><text x="403" y="212" text-anchor="middle" font-size="10" fill="#615a6e">place, wait</text>
+<rect x="10" y="248" width="320" height="48" rx="12" fill="#17141f" stroke="#17141f" stroke-width="1"/><text x="170" y="270.25" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">Staff call next</text><text x="170" y="283.25" text-anchor="middle" font-size="10" fill="#cdb9ef">Front desk behind the staff PIN</text>
+<rect x="10" y="324" width="320" height="48" rx="12" fill="#ffffff" stroke="#ddd5ea" stroke-width="1"/><text x="170" y="346.25" text-anchor="middle" font-size="12" font-weight="700" fill="#17141f">Serving at counter</text><text x="170" y="359.25" text-anchor="middle" font-size="10" fill="#615a6e">Call time recorded, reason shown</text>
+<rect x="10" y="400" width="320" height="48" rx="12" fill="#ffffff" stroke="#ddd5ea" stroke-width="1"/><text x="170" y="422.25" text-anchor="middle" font-size="12" font-weight="700" fill="#17141f">Served · No-show · Cancelled</text><text x="170" y="435.25" text-anchor="middle" font-size="10" fill="#615a6e">Visit length feeds the wait estimate</text>
+<path d="M92 58 L92 84" fill="none" stroke="#8f8a99" stroke-width="1.4" marker-end="url(#head)"/>
+<path d="M272 58 L272 84" fill="none" stroke="#8f8a99" stroke-width="1.4" marker-end="url(#head)"/>
+<path d="M355 34 L373 34" fill="none" stroke="#8f8a99" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#head)"/>
+<path d="M92 140 L92 168" fill="none" stroke="#8f8a99" stroke-width="1.4" marker-end="url(#head)"/>
+<path d="M272 140 L272 168" fill="none" stroke="#8f8a99" stroke-width="1.4" marker-end="url(#head)"/>
+<path d="M330 194 L345 194" fill="none" stroke="#8f8a99" stroke-width="1.4" marker-end="url(#head)"/>
+<path d="M170 220 L170 248" fill="none" stroke="#8f8a99" stroke-width="1.4" marker-end="url(#head)"/>
+<path d="M170 296 L170 324" fill="none" stroke="#8f8a99" stroke-width="1.4" marker-end="url(#head)"/>
+<path d="M170 372 L170 400" fill="none" stroke="#8f8a99" stroke-width="1.4" marker-end="url(#head)"/>
+<path d="M330 424 L403 424 L403 221" fill="none" stroke="#8f8a99" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#head)"/>
+<text x="411" y="330" text-anchor="start" font-size="10" font-weight="600" fill="#615a6e">updates</text>
+<text x="411" y="343" text-anchor="start" font-size="10" font-weight="600" fill="#615a6e">waits</text>
+</svg>

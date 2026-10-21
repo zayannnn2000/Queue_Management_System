@@ -1,95 +1,109 @@
 "use client";
 
 import { useState } from "react";
-import type { BookedRow, Customer, PriorityReason, WaitingRow } from "@/lib/queue";
+import type { BookedRow, Customer, PriorityReason, QueueView, WaitingRow } from "@/lib/queue";
 import { PRIORITY_REASONS } from "@/lib/queue";
 import { EditDialog } from "./edit-dialog";
 import { clock, minutes, serviceName } from "./format";
 import { useQueue } from "./queue-provider";
+import { serviceColor } from "./service-colors";
 import { DangerTextButton, Pill, SecondaryButton, TextButton, Token } from "./ui";
 
-type Filter = "waiting" | "booked" | "done";
+const th = "h-9 px-2.5 text-left text-xs font-normal whitespace-nowrap text-muted first:pl-5 last:pr-4";
+const td = "h-12 px-2.5 whitespace-nowrap first:pl-5 last:pr-4";
 
-const th = "h-9 px-3 text-left text-xs font-normal whitespace-nowrap text-muted first:pl-5 last:pr-5";
-const td = "h-12 px-3 whitespace-nowrap first:pl-5 last:pr-5";
+/** Booked appointments not here yet, for every service: the card under Add patient. */
+export function CheckInList() {
+  const { view } = useQueue().state;
+  const [editing, setEditing] = useState<Customer | null>(null);
+  return (
+    <>
+      <ListPanel title="Check in" count={view.booked.length} hint="Booked, not here yet">
+        <BookedTable rows={view.booked} onEdit={setEditing} />
+      </ListPanel>
+      {editing ? <EditDialog customer={editing} onClose={() => setEditing(null)} /> : null}
+    </>
+  );
+}
 
-/** The three lists, switched by count cards that act as the filter. */
+/** Waiting, full width, then Finished today, folded away. One service filter for both. */
 export function QueueLists() {
   const { state } = useQueue();
   const { view } = state;
-  const [filter, setFilter] = useState<Filter>("waiting");
   const [service, setService] = useState<string>("all");
+  const [showDone, setShowDone] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
-
-  const cards: { id: Filter; label: string; count: number }[] = [
-    { id: "waiting", label: "Waiting", count: view.waiting.length },
-    { id: "booked", label: "Booked, not arrived", count: view.booked.length },
-    { id: "done", label: "Finished today", count: view.done.length },
-  ];
-  const list: Customer[] = filter === "waiting" ? view.waiting : filter === "booked" ? view.booked : view.done;
   const inService = <T extends Customer>(rows: T[]) => (service === "all" ? rows : rows.filter((r) => r.service === service));
+  const all = view.waiting;
 
   return (
-    <section aria-labelledby="lists-heading" className="rounded-lg border border-border bg-surface">
-      <h2 id="lists-heading" className="sr-only">
-        Patients
-      </h2>
-      <div role="group" aria-label="Show list" className="grid grid-cols-3 gap-2 p-3">
-        {cards.map((card) => {
-          const selected = filter === card.id;
-          return (
-            <button
-              key={card.id}
-              type="button"
-              aria-pressed={selected}
-              aria-controls="patient-list"
-              onClick={() => setFilter(card.id)}
-              className={`flex min-h-[61px] flex-col justify-center rounded-md p-3 text-left transition-colors ${
-                selected
-                  ? "bg-accent-pale outline-[1.5px] -outline-offset-[1.5px] outline-accent outline-solid"
-                  : "bg-raised hover:bg-active"
-              }`}
-            >
-              <span className="text-[13px] leading-4 text-muted">{card.label}</span>
-              <span className="num mt-1 text-base font-semibold">{card.count}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div role="group" aria-label="Filter by service" className="flex gap-1.5 overflow-x-auto px-3 pb-3">
-        {[{ id: "all", name: "All services", letter: "" }, ...view.settings.services].map((s) => {
+    <div className="flex min-w-0 flex-col gap-4">
+      <div role="group" aria-label="Filter by service" className="flex gap-1.5 overflow-x-auto">
+        {[{ id: "all", name: "All services" }, ...view.settings.services].map((s) => {
           const selected = service === s.id;
-          const count = s.id === "all" ? list.length : list.filter((r) => r.service === s.id).length;
+          const count = s.id === "all" ? all.length : all.filter((r) => r.service === s.id).length;
           return (
             <button
               key={s.id}
               type="button"
               aria-pressed={selected}
-              aria-controls="patient-list"
               onClick={() => setService(s.id)}
-              className={`h-8 flex-none rounded-full px-3 text-xs whitespace-nowrap transition-colors ${
-                selected ? "bg-primary font-semibold text-white" : "bg-raised text-muted hover:bg-active hover:text-ink"
+              className={`flex h-8 flex-none items-center gap-1.5 rounded-full px-3 text-xs whitespace-nowrap transition-colors ${
+                selected ? "bg-primary font-semibold text-white" : "bg-surface text-muted ring-1 ring-border hover:bg-active hover:text-ink"
               }`}
             >
-              {s.letter ? <span className="mr-1 font-token">{s.letter}</span> : null}
+              {s.id !== "all" ? (
+                <span aria-hidden="true" className="size-2 rounded-full" style={{ background: serviceColor(view.settings, s.id).solid }} />
+              ) : null}
               {s.name} <span className="num opacity-80">{count}</span>
             </button>
           );
         })}
       </div>
 
-      <div id="patient-list" aria-label={cards.find((c) => c.id === filter)!.label} role="region" className="relative overflow-x-auto">
-        {filter === "waiting" ? (
-          <WaitingTable rows={inService(view.waiting)} onEdit={setEditing} />
-        ) : filter === "booked" ? (
-          <BookedTable rows={inService(view.booked)} onEdit={setEditing} />
-        ) : (
-          <DoneTable rows={inService(view.done)} />
-        )}
-      </div>
+      <ListPanel title="Waiting" count={inService(view.waiting).length}>
+        <WaitingTable rows={inService(view.waiting)} onEdit={setEditing} />
+      </ListPanel>
+
+      <ListPanel
+        title="Finished today"
+        count={inService(view.done).length}
+        aside={
+          <button type="button" aria-expanded={showDone} onClick={() => setShowDone((s) => !s)} className="text-xs font-semibold text-accent hover:underline">
+            {showDone ? "Hide" : "Show"}
+          </button>
+        }
+      >
+        {showDone ? <DoneTable rows={inService(view.done)} /> : null}
+      </ListPanel>
 
       {editing ? <EditDialog customer={editing} onClose={() => setEditing(null)} /> : null}
+    </div>
+  );
+}
+
+function ListPanel({
+  title,
+  count,
+  hint,
+  aside,
+  children,
+}: {
+  title: string;
+  count: number;
+  hint?: string;
+  aside?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section aria-label={title} className="min-w-0 rounded-lg border border-border bg-surface">
+      <header className="flex items-baseline gap-2 px-5 pt-4 pb-2">
+        <h2 className="text-base font-semibold">{title}</h2>
+        <span className="num text-sm text-muted">{count}</span>
+        {hint ? <span className="truncate text-xs text-muted">· {hint}</span> : null}
+        {aside ? <span className="ml-auto">{aside}</span> : null}
+      </header>
+      <div className="relative overflow-x-auto">{children}</div>
     </section>
   );
 }
@@ -104,23 +118,30 @@ function EmptyRow({ cols, children }: { cols: number; children: React.ReactNode 
   );
 }
 
-/** Name on line 1, service in grey on line 2: one identity cell instead of two columns. */
-function PatientCell({ name, service }: { name: string; service: string }) {
+/** Name on line 1, the detail (if given) and service in grey on line 2: one identity cell. */
+function PatientCell({ name, service, detail }: { name: string; service: string; detail?: React.ReactNode }) {
   return (
-    <td className={`${td} h-14 max-w-56`}>
+    <td className={`${td} h-14 max-w-40`}>
       <span className="block truncate font-medium">{name}</span>
-      <span className="block truncate text-xs text-muted">{service}</span>
+      <span className="block truncate text-xs text-muted">
+        {detail ? <>{detail} · </> : null}
+        {service}
+      </span>
     </td>
   );
 }
 
-function TypeCell({ row }: { row: Customer & { targetAt?: number } }) {
-  const { state } = useQueue();
-  const { settings } = state.view;
-  if (row.type === "walk_in") return <Pill.Neutral>Walk-in</Pill.Neutral>;
-  if (row.lateConverted) return <Pill.Warning>Late, now walk-in</Pill.Warning>;
-  return <Pill.Accent>Appt {clock(row.scheduledAt!, settings)}</Pill.Accent>;
+/** Walk-in, the appointment time, or a late arrival re-queued as a walk-in, as a few grey words. */
+function typeLabel(row: Customer, settings: QueueView["settings"]): React.ReactNode {
+  if (row.type === "walk_in") return "Walk-in";
+  if (row.lateConverted) return <span className="text-warn-ink">Late, now walk-in</span>;
+  return `Appt ${clock(row.scheduledAt!, settings)}`;
 }
+
+const actionsCell = `${td} text-right`;
+/** Row actions on two fixed lines: the main buttons, then small Print / Edit / Cancel links. */
+const actionsWrap = "flex items-center justify-end gap-1.5 pt-2";
+const actionLinks = "-mr-1.5 flex items-center justify-end pt-0.5 pb-1.5 [&>button]:h-6 [&>button]:px-1.5 [&>button]:text-xs";
 
 /** Staff priority: a compact menu on each waiting row (set a reason, or remove it). */
 function PriorityMenu({ row }: { row: WaitingRow }) {
@@ -154,16 +175,11 @@ function WaitingTable({ rows, onEdit }: { rows: WaitingRow[]; onEdit: (c: Custom
   const { settings } = view;
   const freeRoom = (serviceId: string) => view.rooms.find((r) => r.serviceId === serviceId && !r.current);
   return (
-    <table className="w-full min-w-[860px] border-collapse text-sm">
+    <table className="w-full min-w-[560px] border-collapse text-sm">
       <thead>
         <tr className="border-b border-border">
-          <th className={`${th} w-12 text-right`}>
-            <span title="Place in this service's queue">Pos.</span>
-          </th>
           <th className={th}>Token</th>
           <th className={th}>Patient</th>
-          <th className={th}>Booking</th>
-          <th className={`${th} text-right`}>Target</th>
           <th className={`${th} text-right`}>Est. wait</th>
           <th className={th}>
             <span className="sr-only">Actions</span>
@@ -172,29 +188,46 @@ function WaitingTable({ rows, onEdit }: { rows: WaitingRow[]; onEdit: (c: Custom
       </thead>
       <tbody>
         {rows.length === 0 ? (
-          <EmptyRow cols={7}>
+          <EmptyRow cols={4}>
             Nobody is waiting. Add a walk-in, check in an appointment, or load the sample day from Settings.
           </EmptyRow>
         ) : (
           rows.map((row) => (
             <tr key={row.id} className="border-b border-rule last:border-0">
-              <td className={`${td} num text-right text-muted`}>{row.position}</td>
               <td className={td}>
-                <Token>{row.token}</Token>
-              </td>
-              <PatientCell name={row.name} service={serviceName(settings, row.service)} />
-              <td className={td}>
-                <span className="inline-flex gap-1.5">
-                  <TypeCell row={row} />
-                  {row.priority ? <Pill.Negative>Priority · {row.priority.reason}</Pill.Negative> : null}
+                <span className="inline-flex items-center gap-2">
+                  <span aria-hidden="true" className="size-2 rounded-full" style={{ background: serviceColor(settings, row.service).solid }} />
+                  <Token>{row.token}</Token>
                 </span>
               </td>
-              <td className={`${td} num text-right text-muted`}>{clock(row.targetAt, settings)}</td>
-              <td className={`${td} num text-right font-medium`}>{row.waitLabel}</td>
-              <td className={`${td} text-right whitespace-nowrap`}>
+              <PatientCell name={row.name} service={serviceName(settings, row.service)} detail={typeLabel(row, settings)} />
+              <td className={`${td} num text-right`}>
+                <span className="block font-medium">{row.waitLabel}</span>
+                <span className="block text-xs text-muted">
+                  <span title="Place in this service's queue">#{row.position}</span> ·{" "}
+                  {row.priority ? (
+                    <span className="font-semibold text-bad-ink">Priority · {row.priority.reason}</span>
+                  ) : (
+                    <span
+                      title={
+                        row.hold
+                          ? `Walked in ${clock(row.arrivedAt!, settings)}; target held 15 min so ${row.hold.for}'s appointment goes first`
+                          : "Target time"
+                      }
+                    >
+                      target {clock(row.targetAt, settings)}
+                      {row.hold ? ` · after ${row.hold.for}` : ""}
+                    </span>
+                  )}
+                </span>
+              </td>
+              <td className={actionsCell}>
+                {/* Full width: both action groups on one line (they stack in the narrower Check in card). */}
+                <div className="flex items-center justify-end gap-1 [&>div]:py-0">
+                <div className={actionsWrap}>
                 {freeRoom(row.service) ? (
                   <SecondaryButton
-                    className="mr-1 h-8"
+                    className="h-8"
                     disabled={meta.pending}
                     onClick={() => actions.run({ type: "callPatient", room: freeRoom(row.service)!.id, id: row.id })}
                   >
@@ -202,6 +235,8 @@ function WaitingTable({ rows, onEdit }: { rows: WaitingRow[]; onEdit: (c: Custom
                   </SecondaryButton>
                 ) : null}
                 <PriorityMenu row={row} />
+                </div>
+                <div className={actionLinks}>
                 <TextButton onClick={() => actions.print(row.token)}>
                   Print<span className="sr-only"> token {row.token}</span>
                 </TextButton>
@@ -218,6 +253,8 @@ function WaitingTable({ rows, onEdit }: { rows: WaitingRow[]; onEdit: (c: Custom
                 >
                   Cancel<span className="sr-only"> {row.token}</span>
                 </DangerTextButton>
+                </div>
+                </div>
               </td>
             </tr>
           ))
@@ -231,13 +268,11 @@ function BookedTable({ rows, onEdit }: { rows: BookedRow[]; onEdit: (c: Customer
   const { state, actions, meta } = useQueue();
   const { settings } = state.view;
   return (
-    <table className="w-full min-w-[640px] border-collapse text-sm">
+    <table className="w-full min-w-[380px] border-collapse text-sm">
       <thead>
         <tr className="border-b border-border">
-          <th className={th}>Token</th>
-          <th className={th}>Patient</th>
+          <th className={th}>Token · patient</th>
           <th className={`${th} text-right`}>Time</th>
-          <th className={th}>Status</th>
           <th className={th}>
             <span className="sr-only">Actions</span>
           </th>
@@ -245,31 +280,41 @@ function BookedTable({ rows, onEdit }: { rows: BookedRow[]; onEdit: (c: Customer
       </thead>
       <tbody>
         {rows.length === 0 ? (
-          <EmptyRow cols={5}>No appointments are waiting to arrive.</EmptyRow>
+          <EmptyRow cols={3}>Nobody to check in. Booked appointments appear here until they arrive.</EmptyRow>
         ) : (
           rows.map((row) => (
             <tr key={row.id} className="border-b border-rule last:border-0">
-              <td className={td}>
-                <Token>{row.token}</Token>
+              <td className={`${td} h-14 max-w-44`}>
+                <span className="flex items-center gap-2">
+                  <span aria-hidden="true" className="size-2 rounded-full" style={{ background: serviceColor(settings, row.service).solid }} />
+                  <Token>{row.token}</Token>
+                </span>
+                <span className="block truncate text-xs text-muted">
+                  <span className="font-medium text-ink">{row.name}</span> · {serviceName(settings, row.service)}
+                </span>
               </td>
-              <PatientCell name={row.name} service={serviceName(settings, row.service)} />
-              <td className={`${td} num text-right`}>{clock(row.scheduledAt!, settings)}</td>
-              <td className={td}>
+              <td className={`${td} num text-right`}>
+                <span className="block">{clock(row.scheduledAt!, settings)}</span>
                 {row.overdue ? (
-                  <Pill.Negative>Overdue, past {settings.graceMinutes}-min grace</Pill.Negative>
+                  <span className="block text-xs font-semibold text-bad-ink" title={`Past the ${settings.graceMinutes}-min grace period`}>
+                    Overdue
+                  </span>
                 ) : (
-                  <span className="text-muted">Expected</span>
+                  <span className="block text-xs text-muted">Expected</span>
                 )}
               </td>
-              <td className={`${td} text-right whitespace-nowrap`}>
+              <td className={actionsCell}>
+                <div className={actionsWrap}>
                 <SecondaryButton
-                  className="h-7"
+                  className="h-8"
                   disabled={meta.pending}
                   onClick={() => actions.run({ type: "checkIn", id: row.id })}
                 >
                   Check in<span className="sr-only"> {row.token}</span>
                 </SecondaryButton>
-                <TextButton className="ml-1" onClick={() => onEdit(row)}>
+                </div>
+                <div className={actionLinks}>
+                <TextButton onClick={() => onEdit(row)}>
                   Edit<span className="sr-only"> {row.token}</span>
                 </TextButton>
                 {row.overdue ? (
@@ -294,6 +339,7 @@ function BookedTable({ rows, onEdit }: { rows: BookedRow[]; onEdit: (c: Customer
                 >
                   Cancel<span className="sr-only"> {row.token}</span>
                 </DangerTextButton>
+                </div>
               </td>
             </tr>
           ))
@@ -313,7 +359,7 @@ function DoneTable({ rows }: { rows: Customer[] }) {
   const { state } = useQueue();
   const { settings } = state.view;
   return (
-    <table className="w-full min-w-[640px] border-collapse text-sm">
+    <table className="w-full min-w-[520px] border-collapse text-sm">
       <thead>
         <tr className="border-b border-border">
           <th className={th}>Token</th>
@@ -330,7 +376,10 @@ function DoneTable({ rows }: { rows: Customer[] }) {
           rows.map((row) => (
             <tr key={row.id} className="border-b border-rule last:border-0">
               <td className={td}>
-                <Token>{row.token}</Token>
+                <span className="inline-flex items-center gap-2">
+                  <span aria-hidden="true" className="size-2 rounded-full" style={{ background: serviceColor(settings, row.service).solid }} />
+                  <Token>{row.token}</Token>
+                </span>
               </td>
               <PatientCell name={row.name} service={serviceName(settings, row.service)} />
               <td className={td}>{OUTCOME[row.status as keyof typeof OUTCOME]}</td>

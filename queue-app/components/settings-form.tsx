@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { MAX_ROOMS } from "@/lib/queue";
+import { MAX_ROOMS, MAX_SERVICES, MAX_SERVICE_NAME_LENGTH, suggestLetter } from "@/lib/queue";
+import { FormError } from "./customer-form";
 import { useQueue } from "./queue-provider";
+import { serviceColor } from "./service-colors";
 import { DangerTextButton, Field, PrimaryButton, SecondaryButton, inputClass } from "./ui";
 
 export function SettingsView() {
@@ -11,7 +13,7 @@ export function SettingsView() {
   return (
     <div className="px-4 pt-5 pb-10 md:px-6 md:pt-6">
       <h1 className="font-display text-[24px] leading-7 font-semibold sm:text-[32px] sm:leading-9 tracking-[-0.01em]">Settings</h1>
-      <p className="mt-1 text-[15px] text-muted">Counters, grace period and service times for today&apos;s queue.</p>
+      <p className="mt-1 text-[15px] text-muted">Queue rules, services and rooms, and today&apos;s data.</p>
       <div role="status" aria-live="polite" className="mt-3 min-h-8">
         {notice ? (
           <p
@@ -25,6 +27,7 @@ export function SettingsView() {
       </div>
       <div className="mt-4 flex flex-col">
         <QueueSettings />
+        <Departments />
         <SampleData />
       </div>
     </div>
@@ -63,9 +66,19 @@ function QueueSettings() {
     Object.fromEntries(settings.services.map((s) => [s.id, s.rooms])),
   );
 
+  // Services can be added or removed below, so send (and show) only the ones that exist now.
+  const current = (values: Record<string, number>, key: "defaultMinutes" | "rooms") =>
+    Object.fromEntries(settings.services.map((s) => [s.id, values[s.id] ?? s[key]]));
+
   const save = (e: React.FormEvent) => {
     e.preventDefault();
-    actions.run({ type: "updateSettings", graceMinutes: grace, protectionMinutes: protection, durations, rooms });
+    actions.run({
+      type: "updateSettings",
+      graceMinutes: grace,
+      protectionMinutes: protection,
+      durations: current(durations, "defaultMinutes"),
+      rooms: current(rooms, "rooms"),
+    });
   };
 
   return (
@@ -134,7 +147,7 @@ function QueueSettings() {
                 min={1}
                 max={240}
                 className={`${inputClass} num w-24 text-right`}
-                value={durations[s.id]}
+                value={durations[s.id] ?? s.defaultMinutes}
                 onChange={(e) => setDurations((d) => ({ ...d, [s.id]: Number(e.target.value) }))}
               />
               <input
@@ -145,7 +158,7 @@ function QueueSettings() {
                 min={1}
                 max={MAX_ROOMS}
                 className={`${inputClass} num w-20 text-right`}
-                value={rooms[s.id]}
+                value={rooms[s.id] ?? s.rooms}
                 onChange={(e) => setRooms((r) => ({ ...r, [s.id]: Number(e.target.value) }))}
               />
             </div>
@@ -165,6 +178,146 @@ function QueueSettings() {
           Save settings
         </PrimaryButton>
       </form>
+    </SettingsRow>
+  );
+}
+
+/** Add a service (department) with its own queue, token letter and rooms, or remove one that is idle. */
+function Departments() {
+  const { state, actions, meta } = useQueue();
+  const { settings } = state.view;
+  const [name, setName] = useState("");
+  const [letter, setLetter] = useState<string | null>(null); // null = follow the suggestion
+  const [minutes, setMinutes] = useState(10);
+  const [roomCount, setRoomCount] = useState(1);
+  const [error, setError] = useState<string | null>(null);
+  const shownLetter = letter ?? suggestLetter(settings, name);
+  const full = settings.services.length >= MAX_SERVICES;
+
+  const add = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = await actions.run({ type: "addService", name, letter: shownLetter, minutes, rooms: roomCount });
+    setError(res.ok ? null : res.error);
+    if (res.ok) {
+      setName("");
+      setLetter(null);
+      setMinutes(10);
+      setRoomCount(1);
+    }
+  };
+
+  return (
+    <SettingsRow
+      title="Services and departments"
+      description={
+        <>
+          <p>
+            Each service has its own queue, rooms and token letter: Dental with letter D issues DW-001 for walk-ins and
+            DA-001 for appointments. It appears on the front desk, the timeline and the waiting-room display at once.
+          </p>
+          <p className="mt-2">
+            A service can be removed once nobody is booked, waiting or being seen for it today. Its finished patients
+            stay in today&apos;s history.
+          </p>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <ul aria-label="Services" className="flex flex-col divide-y divide-border rounded-lg bg-surface">
+          {settings.services.map((s) => {
+            const busy = state.view.waiting.some((w) => w.service === s.id) ||
+              state.view.booked.some((b) => b.service === s.id) ||
+              state.view.rooms.some((r) => r.serviceId === s.id && r.current);
+            return (
+              <li key={s.id} className="flex min-h-11 items-center gap-3 px-3">
+                <span aria-hidden="true" className="size-2.5 flex-none rounded-full" style={{ background: serviceColor(settings, s.id).solid }} />
+                <span className="min-w-0 flex-1 truncate text-sm">{s.name}</span>
+                <span className="num text-xs text-muted">
+                  <span className="font-token">{s.letter}W / {s.letter}A</span> · {s.defaultMinutes} min · {s.rooms} room
+                  {s.rooms > 1 ? "s" : ""}
+                </span>
+                <DangerTextButton
+                  className="h-7 px-2 text-xs"
+                  disabled={meta.pending || settings.services.length === 1}
+                  title={busy ? "Has patients today: serve, cancel or mark them no-show first" : undefined}
+                  onClick={() => {
+                    if (window.confirm(`Remove ${s.name}? Its queue, rooms and token letter go from every screen.`)) {
+                      actions.run({ type: "removeService", id: s.id });
+                    }
+                  }}
+                >
+                  Remove<span className="sr-only"> {s.name}</span>
+                </DangerTextButton>
+              </li>
+            );
+          })}
+        </ul>
+
+        <form onSubmit={add} aria-label="Add a service" className="flex flex-col gap-3">
+          <p className="text-sm font-medium">Add a service</p>
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_88px_96px_80px]">
+            <Field label="Name" htmlFor="svc-name">
+              <input
+                id="svc-name"
+                className={inputClass}
+                value={name}
+                maxLength={MAX_SERVICE_NAME_LENGTH}
+                placeholder="e.g. Dental"
+                autoComplete="off"
+                onChange={(e) => setName(e.target.value)}
+              />
+            </Field>
+            <Field label="Letter" htmlFor="svc-letter">
+              <input
+                id="svc-letter"
+                className={`${inputClass} font-token uppercase`}
+                value={shownLetter}
+                maxLength={1}
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(e) => setLetter(e.target.value.toUpperCase())}
+              />
+            </Field>
+            <Field label="Minutes" htmlFor="svc-minutes">
+              <input
+                id="svc-minutes"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={240}
+                className={`${inputClass} num text-right`}
+                value={minutes}
+                onChange={(e) => setMinutes(Number(e.target.value))}
+              />
+            </Field>
+            <Field label="Rooms" htmlFor="svc-rooms">
+              <input
+                id="svc-rooms"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={MAX_ROOMS}
+                className={`${inputClass} num text-right`}
+                value={roomCount}
+                onChange={(e) => setRoomCount(Number(e.target.value))}
+              />
+            </Field>
+          </div>
+          <FormError error={error} />
+          <div className="flex flex-wrap items-center gap-3">
+            <PrimaryButton type="submit" disabled={meta.pending || full || name.trim() === ""}>
+              Add service
+            </PrimaryButton>
+            <p className="text-xs text-muted">
+              {full
+                ? `The clinic has the maximum of ${MAX_SERVICES} services. Remove one to add another.`
+                : shownLetter
+                  ? `Tokens will be ${shownLetter}W-001 and ${shownLetter}A-001. Each letter can belong to one service.`
+                  : "Every letter is taken."}
+            </p>
+          </div>
+        </form>
+      </div>
     </SettingsRow>
   );
 }

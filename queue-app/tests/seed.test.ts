@@ -23,4 +23,18 @@ describe("seed data", () => {
     const next = applyAction(s, { type: "addWalkIn", name: "Test Patient", service: "consultation" }, now);
     expect(next.state.customers.at(-1)!.token).toBe("CW-006");
   });
+
+  it("skips removed services and leaves added ones empty", () => {
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      services: [
+        ...DEFAULT_SETTINGS.services.filter((x) => x.id !== "blood_test"),
+        { id: "dental", name: "Dental", letter: "D", defaultMinutes: 20, rooms: 1, color: "green" },
+      ],
+    };
+    const seeded = buildSeedState(now, settings, 1);
+    expect(seeded.customers.some((c) => c.service === "blood_test")).toBe(false);
+    expect(Object.keys(seeded.seq).some((k) => k.startsWith("B") || k === "?")).toBe(false);
+    expect(buildView(seeded, now).rooms.find((r) => r.serviceId === "dental")?.current).toBeNull();
+  });
 });

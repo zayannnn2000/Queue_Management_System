@@ -30,6 +30,12 @@ If a build instruction conflicts with these, stop and ask.
 
 - Rooms per service are editable in Settings (1–4). Other settings: timezone Asia/Dhaka,
   grace period 10 min, **walk-in protection 30 min** (0 = off), default lengths.
+- **Services can be added and removed in Settings** (revised 2026-10-22). A new service needs a
+  unique name (1–30 chars), a **unique token letter A–Z**, a default length (1–240 min) and rooms
+  (1–4); it gets its own queue, rooms, colour and display panel at once. At most 10 services.
+  A service can be removed only when none of its patients is booked, waiting or being served
+  today, and never the last one; its finished patients stay in today's history. Reset day and
+  the daily rollover keep the service list.
 
 ## Tokens and days
 
@@ -42,7 +48,12 @@ If a build instruction conflicts with these, stop and ask.
 ## Patients
 
 - Fields: **name** (required, 1–40 chars, fictional) and **service**. Nothing else.
-- Walk-in: added → `waiting`, `arrivedAt = now`, target = arrival.
+- Walk-in: added → `waiting`, `arrivedAt = now`, target = arrival — **unless** an appointment of
+  the same service (another patient, booked or checked in) is scheduled after arrival and within
+  15 min (inclusive): then target = **arrival + 15 min** (`hold = { until, for }`), so that
+  appointment is called first. Decided once at arrival; a booking made later doesn't move it.
+  Applies to late arrivals re-queued as walk-ins too. If the appointment patient isn't here, the
+  walk-in is still called when nobody else waits (idle-fill), so a room is never left idle.
 - Appointment: booked for today, now or later, 5-minute slots → `booked` (not queued).
   **No double-booking within a service**: overlapping active appointments of that service may
   not exceed its rooms. Reducing rooms never cancels bookings; Settings lists over-capacity

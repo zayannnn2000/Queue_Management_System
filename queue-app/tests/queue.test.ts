@@ -165,6 +165,60 @@ describe("call next within a service", () => {
   });
 });
 
+describe("walk-in held for an appointment due within 15 minutes", () => {
+  const bookedAndIn = (slot: number, checkInAt: number) =>
+    run(book(fresh(), "Sadia Karim", "consultation", slot, at(9, 0)), { type: "checkIn", id: "CA-001" }, checkInAt);
+
+  it("holds the walk-in's target to arrival + 15 so the appointment is called first", () => {
+    let s = walkIn(bookedAndIn(at(10, 5), at(9, 58)), "Rubel Hossain", "consultation", at(10, 0));
+    expect(s.customers.find((c) => c.token === "CW-001")!.hold).toEqual({ until: at(10, 15), for: "CA-001" });
+    const r = applyAction(s, { type: "callNext", room: CONSULT }, at(10, 0));
+    expect(r.called!.token).toBe("CA-001"); // called early: the walk-in isn't due until 10:15
+    s = run(r.state, { type: "serve", room: CONSULT }, at(10, 12));
+    const next = applyAction(s, { type: "callNext", room: CONSULT }, at(10, 12));
+    expect(next.called!.token).toBe("CW-001");
+    expect(next.called!.reason).toContain("arrived 10:00 (target 10:15, held for CA-001)");
+  });
+
+  it("lets the appointment go first when a room frees up just before its time", () => {
+    let s = walkIn(fresh(), "Early Bird", "consultation", at(9, 40));
+    s = run(s, { type: "callNext", room: CONSULT }, at(9, 48));
+    s = run(book(s, "Sadia Karim", "consultation", at(10, 5), at(9, 50)), { type: "checkIn", id: "CA-001" }, at(9, 59));
+    s = walkIn(s, "Rubel Hossain", "consultation", at(10, 1));
+    s = run(s, { type: "serve", room: CONSULT }, at(10, 3));
+    expect(applyAction(s, { type: "callNext", room: CONSULT }, at(10, 3)).called!.token).toBe("CA-001");
+  });
+
+  it("puts the walk-in behind the appointment in the wait estimate too", () => {
+    const s = walkIn(bookedAndIn(at(10, 10), at(10, 0)), "Rubel Hossain", "consultation", at(10, 0));
+    const order = simulate(s, at(10, 0)).map((p) => p.id);
+    expect(order).toEqual(["CA-001", "CW-001"]);
+  });
+
+  it("does not hold when the appointment is more than 15 min away, already due, or in another service", () => {
+    expect(walkIn(bookedAndIn(at(10, 20), at(10, 0)), "A", "consultation", at(10, 0)).customers.at(-1)!.hold).toBeUndefined();
+    expect(walkIn(bookedAndIn(at(10, 0), at(9, 58)), "B", "consultation", at(10, 0)).customers.at(-1)!.hold).toBeUndefined();
+    expect(walkIn(bookedAndIn(at(10, 5), at(9, 58)), "C", "blood_test", at(10, 0)).customers.at(-1)!.hold).toBeUndefined();
+    // Exactly 15 min ahead still counts.
+    expect(walkIn(bookedAndIn(at(10, 15), at(9, 58)), "D", "consultation", at(10, 0)).customers.at(-1)!.hold?.for).toBe("CA-001");
+  });
+
+  it("counts a booked appointment not yet arrived, but never leaves the room idle for it", () => {
+    let s = book(fresh(), "Sadia Karim", "consultation", at(10, 5), at(9, 0));
+    s = walkIn(s, "Rubel Hossain", "consultation", at(10, 0));
+    expect(s.customers.at(-1)!.hold?.for).toBe("CA-001");
+    // The appointment patient isn't here, so the walk-in is the only one waiting: called now.
+    expect(applyAction(s, { type: "callNext", room: CONSULT }, at(10, 0)).called!.token).toBe("CW-001");
+  });
+
+  it("applies to a late arrival re-queued as a walk-in", () => {
+    let s = book(fresh(), "Late Person", "consultation", at(9, 30), at(9, 0));
+    s = book(s, "Sadia Karim", "consultation", at(10, 5), at(9, 0));
+    s = run(s, { type: "checkIn", id: "CA-001" }, at(9, 55)); // 25 min late
+    expect(s.customers.find((c) => c.token === "CA-001")).toMatchObject({ lateConverted: true, hold: { until: at(10, 10), for: "CA-002" } });
+  });
+});
+
 describe("staff priority and call now", () => {
   const three = () => {
     let s = walkIn(fresh(), "Ayesha Rahman", "consultation", at(9, 0));
@@ -329,6 +383,59 @@ describe("documentation worked example", () => {
       ["CW-002", 21, "~25 min"],
       ["CW-003", 36, "~40 min"],
     ]);
+  });
+});
+
+describe("adding and removing services", () => {
+  const add = (s: QueueState, name: string, letter: string, minutes = 20, rooms = 1) =>
+    run(s, { type: "addService", name, letter, minutes, rooms }, at(9, 0));
+
+  it("adds a service with its own queue, token letter, room and colour", () => {
+    let s = add(fresh(), "Physiotherapy", "t", 30, 2);
+    const physio = s.settings.services.at(-1)!;
+    expect(physio).toMatchObject({ id: "physiotherapy", name: "Physiotherapy", letter: "T", defaultMinutes: 30, rooms: 2 });
+    expect(physio.color).toBe("green"); // the first colour the five defaults don't use
+    s = walkIn(s, "Sabbir Ahmed", "physiotherapy", at(9, 1));
+    s = book(s, "Tania Rahman", "physiotherapy", at(11, 0));
+    expect(s.customers.map((c) => c.token)).toEqual(["TW-001", "TA-001"]);
+    s = run(s, { type: "callNext", room: roomId("physiotherapy", 2) }, at(9, 2));
+    expect(serving(s, roomId("physiotherapy", 2))?.token).toBe("TW-001");
+    const view = buildView(s, at(9, 3));
+    expect(view.rooms.filter((r) => r.serviceId === "physiotherapy")).toHaveLength(2);
+    expect(toPublicView(view).services.at(-1)!.name).toBe("Physiotherapy");
+  });
+
+  it("refuses a duplicate name or letter, a bad letter, and bad lengths or rooms", () => {
+    const s = fresh();
+    expect(() => add(s, "blood test", "Z")).toThrow(/already a service called Blood test/);
+    expect(() => add(s, "Dental", "B")).toThrow(/Blood test already uses the letter B/);
+    expect(() => add(s, "Dental", "7")).toThrow(/one letter, A to Z/);
+    expect(() => add(s, "  ", "D")).toThrow(/Enter the service name/);
+    expect(() => add(s, "Dental", "D", 0)).toThrow(/between 1 and 240/);
+    expect(() => add(s, "Dental", "D", 20, 5)).toThrow(/Rooms must be between 1 and 4/);
+  });
+
+  it("caps the number of services", () => {
+    let s = fresh();
+    for (const [i, l] of ["D", "E", "G", "H", "I"].entries()) s = add(s, `Clinic ${i}`, l);
+    expect(s.settings.services).toHaveLength(10);
+    expect(() => add(s, "One more", "J")).toThrow(/at most 10 services/);
+  });
+
+  it("removes a service only when nobody is booked, waiting or being seen for it", () => {
+    let s = walkIn(fresh(), "Joya Paul", "vaccination", at(9, 0));
+    expect(() => run(s, { type: "removeService", id: "vaccination" }, at(9, 1))).toThrow(/still has patients today \(VW-001\)/);
+    s = run(s, { type: "cancel", id: "VW-001" }, at(9, 2));
+    s = run(s, { type: "removeService", id: "vaccination" }, at(9, 3));
+    expect(s.settings.services.map((x) => x.id)).not.toContain("vaccination");
+    expect(buildView(s, at(9, 4)).done.map((c) => c.token)).toEqual(["VW-001"]); // history kept
+    expect(() => walkIn(s, "Rumi Das", "vaccination", at(9, 5))).toThrow(/Unknown service/);
+  });
+
+  it("never removes the last service", () => {
+    let s = fresh();
+    for (const id of ["follow_up", "blood_test", "vaccination", "prescription"]) s = run(s, { type: "removeService", id }, at(9, 0));
+    expect(() => run(s, { type: "removeService", id: "consultation" }, at(9, 1))).toThrow(/at least one service/);
   });
 });
 

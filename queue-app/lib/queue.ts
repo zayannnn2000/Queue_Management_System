@@ -19,11 +19,13 @@ export type PriorityReason = (typeof PRIORITY_REASONS)[number];
 export interface Service {
   id: string;
   name: string;
-  /** Token prefix letter: C, F, B, V, P. */
+  /** Token prefix letter: C, F, B, V, P (unique per service). */
   letter: string;
   defaultMinutes: number;
   /** Rooms serving this service's queue (1–4). */
   rooms: number;
+  /** Colour key from SERVICE_COLOR_KEYS; services saved before colours existed fall back by id. */
+  color?: string;
 }
 
 export interface Settings {
@@ -51,6 +53,11 @@ export interface Customer {
   room?: string;
   lateConverted: boolean;
   priority?: { reason: PriorityReason; at: number };
+  /**
+   * Set when a walk-in (or late arrival) joined with an appointment of the same service due within
+   * WALK_IN_HOLD_MINUTES: their target is held to arrival + that time so the appointment goes first.
+   */
+  hold?: { until: number; for: string };
 }
 
 export interface CallRecord {
@@ -90,6 +97,8 @@ export type Action =
       durations?: Record<string, number>;
       rooms?: Record<string, number>;
     }
+  | { type: "addService"; name: string; letter: string; minutes: number; rooms: number }
+  | { type: "removeService"; id: string }
   | { type: "resetDay" };
 
 export interface ActionResult {
@@ -111,8 +120,38 @@ export class QueueError extends Error {
 // ---------------------------------------------------------------------------
 
 export const MAX_ROOMS = 4;
+export const MAX_SERVICES = 10;
+export const MAX_SERVICE_NAME_LENGTH = 30;
 export const MAX_NAME_LENGTH = 40;
+
+/** One colour per service (the palette itself lives in the UI). A new service takes the first unused key. */
+export const SERVICE_COLOR_KEYS = [
+  "lilac",
+  "teal",
+  "rose",
+  "amber",
+  "blue",
+  "green",
+  "coral",
+  "plum",
+  "olive",
+  "slate",
+] as const;
+const DEFAULT_COLOR_BY_ID: Record<string, string> = {
+  consultation: "lilac",
+  follow_up: "teal",
+  blood_test: "rose",
+  vaccination: "amber",
+  prescription: "blue",
+};
+
+/** The service's colour key: its own, else the default for the five original services, else slate. */
+export function serviceColorKey(service: Service | undefined): string {
+  return service?.color ?? (service ? DEFAULT_COLOR_BY_ID[service.id] : undefined) ?? "slate";
+}
 export const DURATION_SAMPLES = 5;
+/** A walk-in arriving with a same-service appointment due within this many minutes waits this long. */
+export const WALK_IN_HOLD_MINUTES = 15;
 export const DUE_NOW_MS = 2 * MINUTE;
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -120,11 +159,11 @@ export const DEFAULT_SETTINGS: Settings = {
   protectionMinutes: 30,
   timezone: "Asia/Dhaka",
   services: [
-    { id: "consultation", name: "General consultation", letter: "C", defaultMinutes: 15, rooms: 1 },
-    { id: "follow_up", name: "Follow-up", letter: "F", defaultMinutes: 10, rooms: 1 },
-    { id: "blood_test", name: "Blood test", letter: "B", defaultMinutes: 5, rooms: 1 },
-    { id: "vaccination", name: "Vaccination", letter: "V", defaultMinutes: 5, rooms: 1 },
-    { id: "prescription", name: "Prescription renewal", letter: "P", defaultMinutes: 5, rooms: 1 },
+    { id: "consultation", name: "General consultation", letter: "C", defaultMinutes: 15, rooms: 1, color: "lilac" },
+    { id: "follow_up", name: "Follow-up", letter: "F", defaultMinutes: 10, rooms: 1, color: "teal" },
+    { id: "blood_test", name: "Blood test", letter: "B", defaultMinutes: 5, rooms: 1, color: "rose" },
+    { id: "vaccination", name: "Vaccination", letter: "V", defaultMinutes: 5, rooms: 1, color: "amber" },
+    { id: "prescription", name: "Prescription renewal", letter: "P", defaultMinutes: 5, rooms: 1, color: "blue" },
   ],
 };
 
@@ -167,6 +206,54 @@ export function getService(settings: Settings, id: string): Service {
   const service = settings.services.find((s) => s.id === id);
   if (!service) throw new QueueError(`Unknown service "${id}".`);
   return service;
+}
+
+/**
+ * Validates a new service and gives it an id (from its name), its token letter and a colour.
+ * Name: 1–30 chars, unique. Letter: one A–Z, not used by another service. Rooms 1–4, length 1–240.
+ */
+export function newService(
+  settings: Settings,
+  input: { name: string; letter: string; minutes: number; rooms: number },
+): Service {
+  const name = String(input.name ?? "").trim().replace(/\s+/g, " ");
+  if (name.length === 0) throw new QueueError("Enter the service name.");
+  if (name.length > MAX_SERVICE_NAME_LENGTH) {
+    throw new QueueError(`Service names can be at most ${MAX_SERVICE_NAME_LENGTH} characters.`);
+  }
+  if (settings.services.length >= MAX_SERVICES) {
+    throw new QueueError(`The clinic can have at most ${MAX_SERVICES} services. Remove one first.`);
+  }
+  const taken = settings.services.find((s) => s.name.toLowerCase() === name.toLowerCase());
+  if (taken) throw new QueueError(`There is already a service called ${taken.name}.`);
+
+  const letter = String(input.letter ?? "").trim().toUpperCase();
+  if (!/^[A-Z]$/.test(letter)) throw new QueueError("The token letter must be one letter, A to Z.");
+  const sameLetter = settings.services.find((s) => s.letter === letter);
+  if (sameLetter) {
+    throw new QueueError(`${sameLetter.name} already uses the letter ${letter}. Pick a different letter.`);
+  }
+
+  if (!Number.isInteger(input.minutes) || input.minutes < 1 || input.minutes > 240) {
+    throw new QueueError("Service durations must be between 1 and 240 minutes.");
+  }
+  if (!Number.isInteger(input.rooms) || input.rooms < 1 || input.rooms > MAX_ROOMS) {
+    throw new QueueError(`Rooms must be between 1 and ${MAX_ROOMS}.`);
+  }
+
+  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "service";
+  let id = base;
+  for (let n = 2; settings.services.some((s) => s.id === id); n++) id = `${base}_${n}`;
+  const used = new Set(settings.services.map(serviceColorKey));
+  const color = SERVICE_COLOR_KEYS.find((k) => !used.has(k)) ?? SERVICE_COLOR_KEYS[settings.services.length % SERVICE_COLOR_KEYS.length];
+  return { id, name, letter, defaultMinutes: input.minutes, rooms: input.rooms, color };
+}
+
+/** A letter not used by any service, for the form's default (the name's first free letter, else A–Z). */
+export function suggestLetter(settings: Settings, name: string): string {
+  const used = new Set(settings.services.map((s) => s.letter));
+  const candidates = [...name.toUpperCase().replace(/[^A-Z]/g, ""), ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"];
+  return candidates.find((l) => !used.has(l)) ?? "";
 }
 
 export interface Room {
@@ -217,7 +304,32 @@ export function targetTime(c: Customer): number {
   if (c.type === "appointment" && !c.lateConverted && c.scheduledAt !== undefined) {
     return c.scheduledAt;
   }
-  return c.arrivedAt ?? c.createdAt;
+  return c.hold?.until ?? c.arrivedAt ?? c.createdAt;
+}
+
+/**
+ * The target hold for someone joining as a walk-in at `arrival`: when an appointment of the same
+ * service (booked or checked in, someone else) is due after arrival and within 15 minutes, their
+ * target becomes arrival + 15 so that appointment is called first. Otherwise none (target = arrival).
+ */
+export function walkInHold(
+  state: QueueState,
+  serviceId: string,
+  arrival: number,
+  excludeId?: string,
+): Customer["hold"] {
+  const until = arrival + WALK_IN_HOLD_MINUTES * MINUTE;
+  const soon = state.customers
+    .filter(
+      (c) =>
+        c.id !== excludeId &&
+        c.service === serviceId &&
+        isActiveAppointment(c) &&
+        c.scheduledAt! > arrival &&
+        c.scheduledAt! <= until,
+    )
+    .sort(compareByTarget)[0];
+  return soon ? { until, for: soon.token } : undefined;
 }
 
 /** True when the customer ranks as an appointment (late conversions rank as walk-ins). */
@@ -286,10 +398,11 @@ export function chooseNext(
 }
 
 function describe(c: Customer, tz: string): string {
-  const clock = formatClock(targetTime(c), tz);
-  if (ranksAsAppointment(c)) return `appointment at ${clock}`;
-  if (c.lateConverted) return `late appointment, re-queued as a walk-in at ${clock}`;
-  return `walk-in, arrived ${clock}`;
+  if (ranksAsAppointment(c)) return `appointment at ${formatClock(targetTime(c), tz)}`;
+  const arrived = formatClock(c.arrivedAt ?? c.createdAt, tz);
+  const held = c.hold ? ` (target ${formatClock(c.hold.until, tz)}, held for ${c.hold.for})` : "";
+  if (c.lateConverted) return `late appointment, re-queued as a walk-in at ${arrived}${held}`;
+  return `walk-in, arrived ${arrived}${held}`;
 }
 
 /** Same as chooseNext, plus a plain-language reason for the staff screen. */
@@ -506,6 +619,11 @@ function bump(state: QueueState): QueueState {
   return { ...state, version: state.version + 1 };
 }
 
+/** " Target 10:15 so CA-001 goes first." after an add, when the walk-in was held. */
+function holdNote(hold: Customer["hold"], tz: string): string {
+  return hold ? ` Target ${formatClock(hold.until, tz)} so ${hold.for}'s appointment goes first.` : "";
+}
+
 function issue(state: QueueState, service: Service, type: CustomerType): { token: string; seq: QueueState["seq"] } {
   const prefix = tokenPrefix(service, type);
   const n = (state.seq[prefix] ?? 0) + 1;
@@ -550,6 +668,7 @@ export function applyAction(state: QueueState, action: Action, now: number): Act
       const name = validName(action.name);
       const service = getService(settings, action.service);
       const { token, seq } = issue(state, service, "walk_in");
+      const hold = walkInHold(state, service.id, now);
       const customer: Customer = {
         id: token,
         token,
@@ -561,10 +680,11 @@ export function applyAction(state: QueueState, action: Action, now: number): Act
         checkedIn: true,
         status: "waiting",
         lateConverted: false,
+        ...(hold ? { hold } : {}),
       };
       return {
         state: bump({ ...state, seq, customers: [...state.customers, customer] }),
-        message: `${token} added for ${name} (${service.name}).`,
+        message: `${token} added for ${name} (${service.name}).${holdNote(hold, tz)}`,
       };
     }
 
@@ -599,11 +719,13 @@ export function applyAction(state: QueueState, action: Action, now: number): Act
         throw new QueueError(`${c.token} is not a booked appointment.`);
       }
       const late = isLateArrival(c.scheduledAt!, now, settings.graceMinutes);
+      const hold = late ? walkInHold(state, c.service, now, c.id) : undefined;
       const updated: Customer = { ...c, arrivedAt: now, checkedIn: true, status: "waiting", lateConverted: late };
+      if (hold) updated.hold = hold;
       return {
         state: bump(withCustomer(state, updated)),
         message: late
-          ? `${c.token} arrived after the ${settings.graceMinutes}-minute grace period and joins as a walk-in.`
+          ? `${c.token} arrived after the ${settings.graceMinutes}-minute grace period and joins as a walk-in.${holdNote(hold, tz)}`
           : `${c.token} checked in for ${formatClock(c.scheduledAt!, tz)}.`,
       };
     }
@@ -627,6 +749,10 @@ export function applyAction(state: QueueState, action: Action, now: number): Act
             throw new QueueError("Choose a 5-minute slot today.");
           }
           updated.lateConverted = isLateArrival(action.scheduledAt, c.arrivedAt!, settings.graceMinutes);
+          // Re-judged as of their arrival, like a walk-in who came in then.
+          const hold = updated.lateConverted ? walkInHold(state, c.service, c.arrivedAt!, c.id) : undefined;
+          if (hold) updated.hold = hold;
+          else delete updated.hold;
         }
         updated.scheduledAt = action.scheduledAt;
       }
@@ -725,6 +851,39 @@ export function applyAction(state: QueueState, action: Action, now: number): Act
         service.rooms = rooms;
       }
       return { state: bump({ ...state, settings: next }), message: "Settings saved." };
+    }
+
+    case "addService": {
+      const service = newService(settings, action);
+      return {
+        state: bump({ ...state, settings: { ...settings, services: [...settings.services, service] } }),
+        message: `${service.name} added: tokens ${service.letter}W-001 (walk-in) and ${service.letter}A-001 (appointment), ${service.rooms} room${service.rooms > 1 ? "s" : ""}.`,
+      };
+    }
+
+    case "removeService": {
+      const service = getService(settings, action.id);
+      if (settings.services.length === 1) throw new QueueError("The clinic needs at least one service.");
+      const active = state.customers.filter(
+        (c) => c.service === service.id && (c.status === "booked" || c.status === "waiting" || c.status === "serving"),
+      );
+      if (active.length > 0) {
+        const list = active.map((c) => c.token).join(", ");
+        throw new QueueError(
+          `${service.name} still has patients today (${list}). Serve, cancel or mark them no-show first.`,
+        );
+      }
+      const lastCalls = Object.fromEntries(
+        Object.entries(state.lastCalls).filter(([room]) => !room.startsWith(`${service.id}:`)),
+      );
+      return {
+        state: bump({
+          ...state,
+          lastCalls,
+          settings: { ...settings, services: settings.services.filter((s) => s.id !== service.id) },
+        }),
+        message: `${service.name} removed. Its finished patients stay in today's history.`,
+      };
     }
 
     case "resetDay":

@@ -25,8 +25,10 @@ export function buildSeedState(now: number, settings: Settings, version: number)
   const customers: Customer[] = [];
   const lastCalls: Record<string, CallRecord> = {};
 
+  // A service the clinic has removed gets no sample patients (its rows are built but not kept).
+  const has = (serviceId: string) => settings.services.some((s) => s.id === serviceId);
   const add = (type: CustomerType, serviceId: string, name: string, extra: Partial<Customer>): Customer => {
-    const prefix = tokenPrefix(getService(settings, serviceId), type);
+    const prefix = has(serviceId) ? tokenPrefix(getService(settings, serviceId), type) : "?";
     seq[prefix] = (seq[prefix] ?? 0) + 1;
     const token = makeToken(prefix, seq[prefix]);
     const c: Customer = {
@@ -41,7 +43,7 @@ export function buildSeedState(now: number, settings: Settings, version: number)
       lateConverted: false,
       ...extra,
     };
-    customers.push(c);
+    if (has(serviceId)) customers.push(c);
     return c;
   };
   const walkIn = (serviceId: string, name: string, arrived: number, extra: Partial<Customer> = {}) =>
@@ -49,7 +51,7 @@ export function buildSeedState(now: number, settings: Settings, version: number)
   const appointment = (serviceId: string, name: string, slot: number, extra: Partial<Customer> = {}) =>
     add("appointment", serviceId, name, { scheduledAt: slot, status: "booked", ...extra });
   const nowServing = (c: Customer, reason: string) => {
-    lastCalls[c.room!] = { room: c.room!, customerId: c.id, token: c.token, reason, at: c.calledAt! };
+    if (has(c.service)) lastCalls[c.room!] = { room: c.room!, customerId: c.id, token: c.token, reason, at: c.calledAt! };
   };
 
   const consult = roomId("consultation", 1);
@@ -83,5 +85,6 @@ export function buildSeedState(now: number, settings: Settings, version: number)
   appointment("vaccination", "Fazlul Haque", slotBefore(m(-30)));
   walkIn("prescription", "Lina Roy", m(-5));
 
+  delete seq["?"];
   return { ...createState(now, settings), version, customers, seq, lastCalls };
 }

@@ -114,19 +114,18 @@ export function TokenReady() {
   if (!ready) return null;
   const row = view.waiting.find((w) => w.token === ready);
   return (
-    <div className="mt-5 rounded-lg bg-accent-pale p-4" aria-live="polite">
-      <p className="text-xs font-medium text-accent">{row ? "In the queue. Give the patient this token." : "Token"}</p>
-      <div className="mt-1 flex items-end justify-between gap-3">
-        <Token className="font-display text-[44px] leading-[44px] font-semibold tracking-normal">{ready}</Token>
+    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg bg-accent-pale px-4 py-2.5" aria-live="polite">
+      <Token className="font-display text-[32px] leading-9 font-semibold tracking-normal">{ready}</Token>
+      <p className="num min-w-0 flex-1 text-xs text-muted">
+        <span className="font-medium text-accent">{row ? "In the queue. Give the patient this token." : "Token"}</span>
         {row ? (
-          <p className="num pb-1 text-right text-sm text-muted">
-            Place {row.position}
+          <>
             <br />
-            {row.waitLabel}
-          </p>
+            Place {row.position} · {row.waitLabel}
+          </>
         ) : null}
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      </p>
+      <div className="flex items-center gap-1">
         <PrimaryButton onClick={() => actions.print(ready)}>Print token</PrimaryButton>
         <TextButton onClick={actions.clearReady}>Done</TextButton>
       </div>

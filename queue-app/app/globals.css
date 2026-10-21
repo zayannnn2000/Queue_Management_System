@@ -198,10 +198,10 @@ body {
 }
 
 /* ---- Printed token slip (components/token-slip.tsx), on an 80 mm receipt page ----
-   Chromium ignores "auto" as a page height, so the page is a fixed 80 × 120 mm. */
+   Chromium ignores "auto" as a page height, so the page is a fixed 80 × 160 mm (room for the QR code). */
 @media print {
   @page {
-    size: 80mm 120mm;
+    size: 80mm 160mm;
     margin: 4mm;
   }
   html,

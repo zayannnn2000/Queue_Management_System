@@ -155,6 +155,18 @@ proposed and what was corrected. Model: Claude (Opus) in Claude Code. Dates: 21 
   - the PDF and its HTML source were removed in favour of the Word file
 - **Tested by:** Microsoft Word opened and rendered the file (4 pages, appendix starting on page 3), and I read every page.
 
+## 14. Slip and dropdown polish
+- **Prompts:** move the dropdown arrow in from the edge; make the slip page 79–80 mm with a bigger, centred
+  token; remove the follow-online sentence; then, mid-change: keep the link, but as a QR code.
+- **Changes:**
+  - a custom chevron inset 16 px on every dropdown
+  - the slip on an 80 × 160 mm page, centred, with an 84 px token
+  - the text link replaced by a QR code drawn as SVG (`qrcode-generator`)
+- **Caught:** Chromium ignores `size: 80mm auto`, which is why the old slip printed small on A4; the page height is now fixed.
+  A dev-server cache served stale CSS, so verification used a production build.
+- **Tested by:** the PDF page is 227 × 454 pt (80 × 160 mm) and 1 page; the QR was decoded by machine (jsQR) to
+  `/display?token=W-005`; 34/34 Vitest; Playwright 4 passed / 2 skipped.
+
 ## Things Claude did not do (by design)
 - It did not enter credentials. GitHub and Vercel sign-ins and the Upstash terms were completed by me.
 - It did not invent customers, reviews or statistics. All names are fictional.

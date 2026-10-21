@@ -188,7 +188,7 @@ const content = [
   p("A booking past its grace period without arriving is flagged **Overdue** for staff to check in, mark a no-show or cancel. Edits are allowed until a patient is called. For the last patient only Served and No-show are offered."),
   p("**Tokens.**", { spacing: { before: 60, after: 20 } }),
   bullet("**Issued:** a W-token when a walk-in is added; an A-token when an appointment is booked (it joins the queue only at check-in). Tokens never change, even when edited or late."),
-  bullet("**Printed:** after Add walk-in or Check in, **Print token** prints an 80 mm slip with the token, booking, service, place, estimated wait and time issued, but no name. Waiting rows have **Print** for reprints."),
+  bullet("**Printed:** after Add walk-in or Check in, **Print token** prints an 80 mm slip with the token, booking, service, place, estimated wait, time issued and a QR code that opens the patient's place on the display, but no name. Waiting rows have **Print** for reprints."),
   bullet("**Followed:** the display shows Now serving, the next two under Please get ready, and every waiting token with initial, place and wait. `?token=W-004` or **Find my token** highlights one row (\"You are number 2 in line\")."),
   figures(),
 
@@ -246,7 +246,7 @@ const content = [
     ["#", "Do this", "You should see"],
     [
       ["1", 'Add a walk-in: name "Rina", service General consultation, **Add walk-in**.', "Token W-001 with place 1 and Due now. The display shows W-001 R. within 3 seconds."],
-      ["2", "Click **Print token**.", "The print dialog shows a slip with W-001, Walk-in, the service, place and wait, and no name."],
+      ["2", "Click **Print token**, then scan the slip's QR code with a phone.", "An 80 mm slip with W-001, Walk-in, the service, place, wait and a QR code, and no name. The QR opens the display with W-001 highlighted."],
       ["3", 'Add a walk-in "Karim", service Vaccination.', "W-002 at place 2, about 15 min (one consultation ahead)."],
       ["4", 'Choose **Appointment**, name "Sadia", Follow-up, first free time, **Book appointment**.', "A-001 appears under Booked, not arrived, not in the queue or on the display."],
       ["5", "Open Booked, not arrived and click **Check in** for A-001, then **Print token**.", 'A-001 joins Waiting with an "Appt" label, behind the two walk-ins (its booked time is later).'],

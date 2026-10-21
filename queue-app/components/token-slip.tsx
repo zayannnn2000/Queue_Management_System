@@ -1,5 +1,6 @@
 "use client";
 
+import qrcode from "qrcode-generator";
 import { createPortal } from "react-dom";
 import { HygieiaMark } from "./brand";
 import { clock, serviceName } from "./format";
@@ -7,7 +8,8 @@ import { useQueue } from "./queue-provider";
 import { PrimaryButton, TextButton, Token } from "./ui";
 
 /**
- * The paper slip handed to the patient: token, booking, service, place and estimated wait.
+ * The paper slip handed to the patient: token, booking, service, place and estimated wait, and a QR
+ * code that opens their place on the waiting-room display.
  * Rendered into <body> only while printing; the print stylesheet in
  * globals.css hides everything else and sizes the page for an 80 mm receipt printer.
  */
@@ -28,6 +30,7 @@ export function PrintSlip() {
         ? "Appointment, joined as walk-in"
         : `Appointment ${clock(customer.scheduledAt!, settings)}`;
   const date = new Intl.DateTimeFormat("en-GB", { timeZone: settings.timezone, weekday: "short", day: "numeric", month: "short" }).format(view.now);
+  const displayUrl = `${window.location.origin}/display?token=${encodeURIComponent(customer.token)}`;
 
   // The page is 80 mm wide with 4 mm margins, so the slip fills the 72 mm between them, centred.
   return createPortal(
@@ -63,9 +66,40 @@ export function PrintSlip() {
           {date}, {clock(view.now, settings)}
         </dd>
       </dl>
-      <p style={{ fontSize: 12, marginTop: 16, textAlign: "center" }}>Please keep this slip until you are called.</p>
+      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+        <QrCode text={displayUrl} size={112} />
+        <p style={{ fontSize: 11.5, textAlign: "center", lineHeight: 1.35 }}>
+          Scan to follow your place in line on your phone.
+        </p>
+      </div>
+      <p style={{ fontSize: 12, marginTop: 8, textAlign: "center" }}>Please keep this slip until you are called.</p>
     </div>,
     document.body,
+  );
+}
+
+/** A QR code drawn as one SVG path (black modules on white, 2-module quiet zone), so it prints crisply. */
+function QrCode({ text, size }: { text: string; size: number }) {
+  const qr = qrcode(0, "M");
+  qr.addData(text);
+  qr.make();
+  const n = qr.getModuleCount();
+  let d = "";
+  for (let row = 0; row < n; row++) {
+    for (let col = 0; col < n; col++) if (qr.isDark(row, col)) d += `M${col} ${row}h1v1h-1z`;
+  }
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`-2 -2 ${n + 4} ${n + 4}`}
+      shapeRendering="crispEdges"
+      role="img"
+      aria-label={`QR code: ${text}`}
+    >
+      <rect x={-2} y={-2} width={n + 4} height={n + 4} fill="#fff" />
+      <path d={d} fill="#000" />
+    </svg>
   );
 }
 

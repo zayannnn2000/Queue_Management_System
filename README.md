@@ -52,8 +52,8 @@ queue-app/
 The front desk (`/staff`, its settings and the staff API) is behind one shared staff PIN; the waiting-room
 display stays public.
 
-> **Demo PIN: `12345`.** This is a student project, so the PIN for the live demo is published here on
-> purpose so reviewers can sign in. A real clinic would keep its PIN out of the repository.
+> **Demo PIN: `12345`.** This is a simulation with fictional patients, so the PIN for the live demo is
+> published here on purpose so reviewers can sign in. A real clinic would keep its PIN out of the repository.
 
 - Set it on Vercel, then redeploy: `vercel env add STAFF_PIN production` (4–8 digits), then `vercel --prod`.
   To change it, `vercel env rm STAFF_PIN production`, add it again, and redeploy; everyone is signed out.

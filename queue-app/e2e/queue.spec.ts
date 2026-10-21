@@ -13,6 +13,7 @@ async function addWalkIn(page: Page, name: string) {
   await page.getByRole("button", { name: "Walk-in", exact: true }).click();
   await page.getByLabel("Patient name").fill(name);
   await page.getByRole("button", { name: "Add walk-in" }).click();
+  await expect(page.getByRole("status").getByText(`added for ${name}`)).toBeVisible();
 }
 
 test("full staff flow: add, book, check in, call next, serve, no-show", async ({ page }) => {

@@ -103,11 +103,13 @@ function WalkInForm({ onIssued }: { onIssued: (token: string) => void }) {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await actions.run({ type: "addWalkIn", name, service });
+    const submitted = name;
+    const res = await actions.run({ type: "addWalkIn", name: submitted, service });
     setError(res.ok ? null : res.error);
     if (res.ok && res.issued) {
       onIssued(res.issued);
-      setName("");
+      // Clear only if staff haven't started typing the next patient meanwhile.
+      setName((current) => (current === submitted ? "" : current));
     }
   };
 
@@ -136,11 +138,12 @@ function AppointmentForm({ onIssued }: { onIssued: (token: string) => void }) {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await actions.run({ type: "book", name, service, scheduledAt });
+    const submitted = name;
+    const res = await actions.run({ type: "book", name: submitted, service, scheduledAt });
     setError(res.ok ? null : res.error);
     if (res.ok && res.issued) {
       onIssued(res.issued);
-      setName("");
+      setName((current) => (current === submitted ? "" : current));
       setChosen(null);
     }
   };

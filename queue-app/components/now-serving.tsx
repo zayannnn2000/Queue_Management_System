@@ -65,21 +65,33 @@ function ServingCounter({ counter }: { counter: CounterView }) {
       <p className="num mt-1 text-sm text-muted">
         Called {clock(current.calledAt!, view.settings)} · {minutes(elapsed)} so far · expected done{" "}
         {clock(counter.expectedEndAt!, view.settings)}
+        {hasNext ? null : " · nobody else waiting"}
       </p>
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <PrimaryButton
-          disabled={meta.pending || !hasNext}
-          onClick={() => actions.run({ type: "serve", counter: counter.counter, callNext: true })}
-          title={hasNext ? undefined : "Nobody is waiting"}
-        >
-          Served &amp; call next
-        </PrimaryButton>
-        <SecondaryButton
-          disabled={meta.pending}
-          onClick={() => actions.run({ type: "serve", counter: counter.counter })}
-        >
-          Served
-        </SecondaryButton>
+        {hasNext ? (
+          <>
+            <PrimaryButton
+              disabled={meta.pending}
+              onClick={() => actions.run({ type: "serve", counter: counter.counter, callNext: true })}
+            >
+              Served &amp; call next
+            </PrimaryButton>
+            <SecondaryButton
+              disabled={meta.pending}
+              onClick={() => actions.run({ type: "serve", counter: counter.counter })}
+            >
+              Served
+            </SecondaryButton>
+          </>
+        ) : (
+          // Last patient: nobody to call next, so "Served" becomes the main action.
+          <PrimaryButton
+            disabled={meta.pending}
+            onClick={() => actions.run({ type: "serve", counter: counter.counter })}
+          >
+            Served
+          </PrimaryButton>
+        )}
         <DangerTextButton
           disabled={meta.pending}
           onClick={() => {

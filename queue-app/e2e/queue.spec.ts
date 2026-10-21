@@ -56,6 +56,9 @@ test("full staff flow: add, book, check in, call next, serve, no-show", async ({
   // Call and serve W-002.
   await counter(page).getByRole("button", { name: "Call next" }).click();
   await expect(counter(page).getByText("W-002", { exact: true })).toBeVisible();
+  // Last patient: nobody to call next, so only Served and No-show remain.
+  await expect(counter(page).getByRole("button", { name: "Served & call next" })).toHaveCount(0);
+  await expect(counter(page).getByRole("button", { name: "No-show" })).toBeVisible();
   await counter(page).getByRole("button", { name: "Served", exact: true }).click();
   await expect(counter(page).getByText(/Nobody is checked in/)).toBeVisible();
 

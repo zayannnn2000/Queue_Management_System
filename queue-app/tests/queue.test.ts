@@ -281,7 +281,7 @@ describe("wait estimate", () => {
 });
 
 describe("documentation worked example", () => {
-  // docs/documentation.html §4: 1 counter, now 10:00, current patient expected to finish at 10:06.
+  // docs/documentation.docx §4: 1 counter, now 10:00, current patient expected to finish at 10:06.
   // The current patient takes W-001 here, so the document's W-001 / W-002 are W-002 / W-003 below.
   function scenario(w2Arrival: number) {
     let s = fresh();

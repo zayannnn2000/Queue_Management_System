@@ -4,7 +4,7 @@ A queue for walk-ins and appointments at a small clinic (the demo "Hygieia Welln
 patients, call the next one and see estimated waits; patients follow their place on a public display.
 
 - **Live app:** https://queue-management-system-jet-six.vercel.app
-  - Staff console: [`/staff`](https://queue-management-system-jet-six.vercel.app/staff) ·
+  - Staff console: [`/staff`](https://queue-management-system-jet-six.vercel.app/staff) (demo staff PIN `12345`) ·
     settings: [`/staff/settings`](https://queue-management-system-jet-six.vercel.app/staff/settings)
   - Waiting-room display: [`/display`](https://queue-management-system-jet-six.vercel.app/display),
     with `?token=W-004` to highlight one patient
@@ -51,6 +51,9 @@ queue-app/
 
 The front desk (`/staff`, its settings and the staff API) is behind one shared staff PIN; the waiting-room
 display stays public.
+
+> **Demo PIN: `12345`.** This is a student project, so the PIN for the live demo is published here on
+> purpose so reviewers can sign in. A real clinic would keep its PIN out of the repository.
 
 - Set it on Vercel, then redeploy: `vercel env add STAFF_PIN production` (4–8 digits), then `vercel --prod`.
   To change it, `vercel env rm STAFF_PIN production`, add it again, and redeploy; everyone is signed out.

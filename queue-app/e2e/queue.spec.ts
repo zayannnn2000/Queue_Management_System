@@ -2,8 +2,12 @@ import { type Page, expect, test } from "@playwright/test";
 
 // Fictional names only.
 
-test.beforeEach(async ({ request }) => {
-  const res = await request.post("/api/action", { data: { type: "resetDay" } });
+// When the server has a staff PIN, sign the browser context in first (E2E_STAFF_PIN is a test PIN).
+// API calls go through page.request so they share the signed-in cookie.
+test.beforeEach(async ({ page }) => {
+  const pin = process.env.E2E_STAFF_PIN;
+  if (pin) expect((await page.request.post("/api/login", { data: { pin } })).ok()).toBeTruthy();
+  const res = await page.request.post("/api/action", { data: { type: "resetDay" } });
   expect(res.ok()).toBeTruthy();
 });
 
@@ -72,7 +76,8 @@ test("full staff flow: add, book, check in, call next, serve, no-show", async ({
   await expect(finished.getByText("No-show", { exact: true })).toHaveCount(1);
 });
 
-test("prints a token slip for a walk-in and for a checked-in appointment", async ({ page, request }) => {
+test("prints a token slip for a walk-in and for a checked-in appointment", async ({ page }) => {
+  const request = page.request;
   // Replace the print dialog with a probe that records the slip on the page at print time.
   await page.addInitScript(() => {
     const w = window as unknown as { __printed: string[] };
@@ -118,7 +123,8 @@ test("prints a token slip for a walk-in and for a checked-in appointment", async
   expect((await printed())[1]).toContain("W-001");
 });
 
-test("double-booking is refused and the slot shows as full", async ({ page, request }) => {
+test("double-booking is refused and the slot shows as full", async ({ page }) => {
+  const request = page.request;
   await page.goto("/staff");
   await page.getByRole("button", { name: "Appointment", exact: true }).click();
   const time = page.getByLabel("Time today");

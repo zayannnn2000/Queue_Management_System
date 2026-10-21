@@ -47,6 +47,20 @@ queue-app/
   tests/, e2e/            Vitest and Playwright
 ```
 
+## Staff PIN
+
+The front desk (`/staff`, its settings and the staff API) is behind one shared staff PIN; the waiting-room
+display stays public.
+
+- Set it on Vercel, then redeploy: `vercel env add STAFF_PIN production` (4–8 digits), then `vercel --prod`.
+  To change it, `vercel env rm STAFF_PIN production`, add it again, and redeploy; everyone is signed out.
+- A correct PIN gives that browser a signed, httpOnly cookie for 12 hours (one shift). **Lock** signs it out.
+- 5 wrong PINs from one address lock sign-in for 5 minutes (counted in Redis on Vercel).
+- Without `STAFF_PIN` (local development) the front desk is open.
+- Optional `AUTH_SECRET`: any long random string, mixed into the cookie signature.
+- Testing with a PIN: run a server with `STAFF_PIN=<test pin>`, then
+  `E2E_BASE_URL=<that url> E2E_STAFF_PIN=<test pin> npm run test:e2e`.
+
 ## Printing token slips
 
 When a walk-in is added or an appointment checks in, the front desk shows the token with a **Print token**
@@ -118,7 +132,8 @@ The screen shows who was called and why, e.g. *"A-003 called: appointment at 10:
 
 ## Limitations
 
-- `/staff` has no login. Anyone with the URL can operate the queue. A real clinic needs staff authentication.
+- Staff sign-in is one shared PIN, not individual accounts: there is no record of *who* pressed a button,
+  and a PIN told to someone who leaves must be changed for everyone.
 - One shared queue per deployment (no multi-branch support).
 - Without Redis (local dev) the queue lives in one server process's memory and is lost on restart.
 - Times are server times; there is no offline mode.

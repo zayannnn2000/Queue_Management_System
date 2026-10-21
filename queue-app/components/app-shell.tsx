@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { configuredPin } from "@/lib/auth";
 import { HygieiaMark, Wordmark } from "./brand";
+import { LockButton } from "./lock-button";
 import { LiveClock } from "./live-clock";
 import { NavLinks } from "./nav-links";
 
@@ -9,6 +11,7 @@ import { NavLinks } from "./nav-links";
  * At 1440: 248 sidebar + 1184 sheet + 8 inset = 1440. Below 1100 the sidebar folds into the top bar.
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const pinEnabled = configuredPin() !== null;
   return (
     <>
       <a
@@ -24,7 +27,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Wordmark />
           </Link>
           <NavLinks className="mt-9 flex flex-col gap-1" variant="sidebar" />
-          <p className="mt-auto px-3 text-xs leading-4 text-muted">Demo clinic. All patients are fictional.</p>
+          <div className="mt-auto flex flex-col gap-3">
+            {pinEnabled ? <LockButton className="self-start" /> : null}
+            <p className="px-3 text-xs leading-4 text-muted">Demo clinic. All patients are fictional.</p>
+          </div>
         </aside>
 
         <header className="flex h-14 items-center gap-3 px-4 min-[1100px]:pr-5 min-[1100px]:pl-0">
@@ -33,8 +39,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="font-display text-[24px] leading-none font-semibold">Hygieia</span>
           </Link>
           <NavLinks className="ml-2 flex gap-1 max-sm:hidden min-[1100px]:hidden" variant="bar" />
-          <div className="ml-auto flex items-center text-muted">
+          <div className="ml-auto flex items-center gap-2 text-muted">
             <LiveClock className="max-sm:hidden" />
+            {pinEnabled ? <LockButton className="min-[1100px]:hidden" /> : null}
           </div>
         </header>
         <NavLinks className="flex gap-1 overflow-x-auto px-3 pb-2 sm:hidden" variant="bar" />

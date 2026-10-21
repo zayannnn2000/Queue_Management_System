@@ -49,6 +49,13 @@ interface QueueContextValue {
 
 const QueueContext = createContext<QueueContextValue | null>(null);
 
+/** The staff session ended (PIN changed, shift over): back to the PIN screen, returning here after. */
+function toSignIn() {
+  // Full load on purpose: the proxy re-checks the session and no cached staff data survives.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+  window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+}
+
 export function useQueue(): QueueContextValue {
   const ctx = use(QueueContext);
   if (!ctx) throw new Error("useQueue must be used inside <QueueProvider>.");
@@ -92,6 +99,7 @@ export function QueueProvider({
       if (document.hidden || inFlight.current > 0) return;
       try {
         const res = await fetch("/api/state", { cache: "no-store" });
+        if (res.status === 401) return toSignIn();
         if (!res.ok) throw new Error(String(res.status));
         const data = (await res.json()) as { view: QueueView };
         if (!cancelled && inFlight.current === 0) {
@@ -121,6 +129,11 @@ export function QueueProvider({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(action),
           });
+          if (res.status === 401) {
+            toSignIn();
+            resolve({ ok: false, error: "Signed out." });
+            return;
+          }
           const data = await res.json();
           if (!data.ok) {
             setNotice({ kind: "error", text: data.error, at: Date.now() });

@@ -126,6 +126,24 @@ proposed and what was corrected. Model: Claude (Opus) in Claude Code. Dates: 21 
 - **Tested by:** 29/29 Vitest; 4/4 Playwright (a new test stubs the print dialog and checks the slip for a
   walk-in, a checked-in appointment and a reprint, with no name on it); screenshots of the veil, the screens and the slip PDF.
 
+## 12. Fixes from my testing, then a staff PIN
+- **Fixes from testing:**
+  - "Served & call next" now disappears for the last patient.
+  - The booking note clears on check-in, and the token card clears after printing.
+  - A stale-tab question turned out to be an old page that needed a refresh.
+- **Prompt:** "an easy PIN to log in to the system, the PIN will be common".
+- **Changes:**
+  - a shared `STAFF_PIN` environment variable, never in the code
+  - a sign-in page with a keypad
+  - a signed 12-hour httpOnly cookie; Lock signs out
+  - a 5-try lock-out, counted in Redis
+  - checks in both the Next 16 proxy and each staff API route; the display and its public data stay open
+- **My step:** I chose the real PIN and set it on Vercel myself; Claude didn't choose or enter it.
+- **Tested by:**
+  - 34/34 Vitest, including signing, expiry, tampering, a changed PIN, and safe redirects after sign-in
+  - Playwright: 4 passed / 2 skipped without a PIN; all 6 passed against a production build with a test PIN
+    (redirect, 401s, wrong PIN, keypad sign-in, Lock, lock-out, plus the full flow while signed in)
+
 ## Things Claude did not do (by design)
 - It did not enter credentials. GitHub and Vercel sign-ins and the Upstash terms were completed by me.
 - It did not invent customers, reviews or statistics. All names are fictional.

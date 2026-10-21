@@ -1,3 +1,4 @@
+import { SIGNED_OUT, requestIsStaff } from "@/lib/auth";
 import { type Action, QueueError, applyAction, buildView } from "@/lib/queue";
 import { buildSeedState } from "@/lib/seed";
 import { mutate, storageKind } from "@/lib/store";
@@ -6,6 +7,7 @@ type Body = Action | { type: "seed" };
 
 // POST /api/action  { type, ...payload } → applies one staff action atomically.
 export async function POST(request: Request) {
+  if (!(await requestIsStaff(request, Date.now()))) return Response.json(SIGNED_OUT, { status: 401 });
   let body: Body;
   try {
     body = (await request.json()) as Body;

@@ -54,14 +54,43 @@ const memoryStore: Store = {
   },
 };
 
-function pickStore(): Store {
-  const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
-  return url && token ? redisStore(new Redis({ url, token })) : memoryStore;
+const redisUrl = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
+const redisToken = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
+const redis = redisUrl && redisToken ? new Redis({ url: redisUrl, token: redisToken }) : null;
+
+const store = redis ? redisStore(redis) : memoryStore;
+export const storageKind: StorageKind = store.kind;
+
+// ---- Failed PIN attempts, per client, expiring after `windowMs` ----
+
+const memoryAttempts = globalThis as unknown as { __pinAttempts?: Map<string, { count: number; until: number }> };
+
+export async function failedAttempts(client: string, now: number): Promise<number> {
+  const key = `queue:pin-fail:${client}`;
+  if (redis) return (await redis.get<number>(key)) ?? 0;
+  const entry = memoryAttempts.__pinAttempts?.get(key);
+  return entry && entry.until > now ? entry.count : 0;
 }
 
-const store = pickStore();
-export const storageKind: StorageKind = store.kind;
+export async function recordFailedAttempt(client: string, now: number, windowMs: number): Promise<number> {
+  const key = `queue:pin-fail:${client}`;
+  if (redis) {
+    const count = await redis.incr(key);
+    if (count === 1) await redis.pexpire(key, windowMs);
+    return count;
+  }
+  const map = (memoryAttempts.__pinAttempts ??= new Map());
+  const entry = map.get(key);
+  const count = entry && entry.until > now ? entry.count + 1 : 1;
+  map.set(key, { count, until: entry && entry.until > now ? entry.until : now + windowMs });
+  return count;
+}
+
+export async function clearFailedAttempts(client: string): Promise<void> {
+  const key = `queue:pin-fail:${client}`;
+  if (redis) await redis.del(key);
+  else memoryAttempts.__pinAttempts?.delete(key);
+}
 
 /** Current state, rolled over to a fresh queue if the clinic-local date has changed. */
 export async function loadState(now: number): Promise<QueueState> {

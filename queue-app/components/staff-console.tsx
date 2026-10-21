@@ -11,22 +11,24 @@ import { PrintSlip } from "./token-slip";
 import { Panel } from "./ui";
 
 /**
- * Front desk. Grid at 1440: sheet 1184 − 2 × 32 padding = 1120 = 744 main + 24 gap + 352 rail.
- * Below 1280 the rail stacks under the main column.
+ * Front desk. From 1280 px: the counters and Add patient share the top row (the two jobs done most),
+ * the Next-hour strip runs full width, then the lists beside the service times.
+ * At 1440: sheet 1184 − 2 × 32 padding = 1120 = 548 + 24 + 548 on top; 744 + 24 + 352 below.
+ * Below 1280 everything stacks: counters, Add patient, strip, lists, service times.
  */
 export function StaffConsole() {
   return (
     <div className="px-4 pt-6 pb-10 md:px-8 md:pt-8">
       <PrintSlip />
       <TitleRow />
-      <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-6 min-[1280px]:grid-cols-[minmax(0,1fr)_352px]">
-        <div className="flex min-w-0 flex-col gap-6">
+      <div className="mt-6 flex min-w-0 flex-col gap-6">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-6 min-[1280px]:grid-cols-2">
           <NowServing />
-          <CallStrip />
-          <QueueLists />
-        </div>
-        <div className="flex flex-col gap-6">
           <CustomerForm />
+        </div>
+        <CallStrip />
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-6 min-[1280px]:grid-cols-[minmax(0,1fr)_352px]">
+          <QueueLists />
           <ServiceTimes />
         </div>
       </div>

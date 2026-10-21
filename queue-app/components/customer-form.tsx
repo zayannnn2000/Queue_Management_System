@@ -69,7 +69,7 @@ function NameAndService({
   const { state } = useQueue();
   const { settings, expected } = state.view;
   return (
-    <>
+    <div className="grid gap-4 sm:grid-cols-2">
       <Field label="Patient name" htmlFor={`${prefix}-name`}>
         <input
           id={`${prefix}-name`}
@@ -93,12 +93,12 @@ function NameAndService({
         >
           {settings.services.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.name} · about {Math.round(expected[s.id]?.minutes ?? s.defaultMinutes)} min
+              {s.name} · {Math.round(expected[s.id]?.minutes ?? s.defaultMinutes)} min
             </option>
           ))}
         </select>
       </Field>
-    </>
+    </div>
   );
 }
 
@@ -123,11 +123,13 @@ function WalkInForm({ onIssued }: { onIssued: () => void }) {
   return (
     <form onSubmit={submit} className="mt-4 flex flex-col gap-4" aria-label="Add walk-in">
       <NameAndService name={name} setName={setName} service={service} setService={setService} prefix="walkin" />
-      <p className="text-xs text-muted">Joins the queue now. Their target time is their arrival.</p>
       <FormError error={error} />
-      <PrimaryButton type="submit" disabled={meta.pending} className="h-10 self-start">
-        Add walk-in
-      </PrimaryButton>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <PrimaryButton type="submit" disabled={meta.pending} className="h-10">
+          Add walk-in
+        </PrimaryButton>
+        <p className="text-xs text-muted">Joins the queue now. Their target time is their arrival.</p>
+      </div>
     </form>
   );
 }
@@ -158,6 +160,7 @@ function AppointmentForm({ onIssued }: { onIssued: (token: string) => void }) {
   return (
     <form onSubmit={submit} className="mt-4 flex flex-col gap-4" aria-label="Book appointment">
       <NameAndService name={name} setName={setName} service={service} setService={setService} prefix="appt" />
+      <div className="grid gap-4 sm:grid-cols-2">
       <Field
         label="Time today"
         htmlFor="appt-time"
@@ -182,9 +185,10 @@ function AppointmentForm({ onIssued }: { onIssued: (token: string) => void }) {
           </select>
         )}
       </Field>
-      <p className="text-xs text-muted">
+      <p className="self-center text-xs text-muted sm:pt-3">
         Not queued until they check in. Arriving more than {view.settings.graceMinutes} min late makes them a walk-in.
       </p>
+      </div>
       <FormError error={error} />
       <PrimaryButton type="submit" disabled={meta.pending || !firstFree} className="h-10 self-start">
         Book appointment

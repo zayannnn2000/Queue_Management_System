@@ -10,7 +10,8 @@ import { DangerTextButton, PrimaryButton, SecondaryButton, Token } from "./ui";
 export function NowServing() {
   const { state } = useQueue();
   const { counters } = state.view;
-  const cols = counters.length === 1 ? "" : counters.length === 2 ? "sm:grid-cols-2" : "sm:grid-cols-2 xl:grid-cols-4";
+  // The counters share the top row with Add patient, so at most two sit side by side.
+  const cols = counters.length === 1 ? "" : "sm:grid-cols-2";
   return (
     <section aria-labelledby="counters-heading">
       <h2 id="counters-heading" className="sr-only">

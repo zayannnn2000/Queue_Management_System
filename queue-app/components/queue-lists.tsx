@@ -53,7 +53,7 @@ export function QueueLists() {
         })}
       </div>
 
-      <div id="patient-list" aria-label={cards.find((c) => c.id === filter)!.label} role="region" className="overflow-x-auto">
+      <div id="patient-list" aria-label={cards.find((c) => c.id === filter)!.label} role="region" className="relative overflow-x-auto">
         {filter === "waiting" ? (
           <WaitingTable rows={view.waiting} onEdit={setEditing} />
         ) : filter === "booked" ? (

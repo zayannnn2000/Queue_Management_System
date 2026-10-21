@@ -280,6 +280,33 @@ describe("wait estimate", () => {
   });
 });
 
+describe("documentation worked example", () => {
+  // docs/documentation.html §4: 1 counter, now 10:00, current patient expected to finish at 10:06.
+  // The current patient takes W-001 here, so the document's W-001 / W-002 are W-002 / W-003 below.
+  function scenario(w2Arrival: number) {
+    let s = fresh();
+    s = run(s, { type: "book", name: "Lamia Haque", service: "follow_up", scheduledAt: at(10, 5) }, at(8, 30));
+    s = run(s, { type: "addWalkIn", name: "Current Patient", service: "consultation" }, at(9, 40));
+    s = run(s, { type: "callNext", counter: 1 }, at(9, 51)); // 15-min default → expected end 10:06
+    s = run(s, { type: "addWalkIn", name: "Sohel Rana", service: "consultation" }, at(9, 50));
+    s = run(s, { type: "checkIn", id: "A-001" }, at(9, 55));
+    s = run(s, { type: "addWalkIn", name: "Tania Akter", service: "vaccination" }, w2Arrival);
+    return buildView(s, at(10, 0)).waiting.map((w) => [w.token, w.waitMs / MINUTE, w.waitLabel]);
+  }
+
+  it("matches the table", () => {
+    expect(scenario(at(9, 58))).toEqual([
+      ["W-002", 6, "~10 min"],
+      ["W-003", 21, "~25 min"],
+      ["A-001", 26, "~30 min"],
+    ]);
+  });
+
+  it("calls the appointment first when the walk-in's target is later", () => {
+    expect(scenario(at(10, 8)).map(([token]) => token)).toEqual(["W-002", "A-001", "W-003"]);
+  });
+});
+
 describe("day and display", () => {
   it("resets tokens on a new clinic-local day", () => {
     let s = run(fresh(), { type: "addWalkIn", name: "Arman Ali", service: "follow_up" }, at(9, 0));

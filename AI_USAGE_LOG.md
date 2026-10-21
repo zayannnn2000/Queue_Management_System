@@ -108,6 +108,24 @@ proposed and what was corrected. Model: Claude (Opus) in Claude Code. Dates: 21 
 - **Note:** the design skill bans violet/indigo palettes by default; lilac was used because I asked for it explicitly.
 - **Tested by:** the design inspector at 1440, 768 and 390px (0 failures); 29/29 Vitest; 3/3 Playwright.
 
+## 11. Printed tokens, opening animation, chic pass
+- **Prompt:** a bigger logo; let the front desk print the token at walk-in and at check-in; make it more
+  chic than a colour change; a logo reveal on refresh (a reference splash screen was shared as inspiration).
+- **Changes:**
+  - a printable 80 mm slip (no patient name), with a Print button after a walk-in is added or an
+    appointment checks in, and Print on every waiting row
+  - a CSS-only opening veil (mark and wordmark rise from a blur, a lilac line fills, the veil lifts at
+    about 2.4 s and removes itself)
+  - Cormorant Garamond for the wordmark, titles and the big called token
+  - a new Bowl of Hygieia mark, bigger in the sidebar and on the display
+- **Caught along the way:**
+  - the new E2E booking failed after 23:00 because "now + 1 h" was tomorrow; the test now uses the form's first free slot
+  - the token class overrode the serif on big tokens
+- **Allowed exceptions:** the inspector flags the opening veil (`covered-text`) and lilac (`palette-purple`).
+  Both were explicit requests, so they're passed with `--allow`; there are no other failures.
+- **Tested by:** 29/29 Vitest; 4/4 Playwright (a new test stubs the print dialog and checks the slip for a
+  walk-in, a checked-in appointment and a reprint, with no name on it); screenshots of the veil, the screens and the slip PDF.
+
 ## Things Claude did not do (by design)
 - It did not enter credentials. GitHub and Vercel sign-ins and the Upstash terms were completed by me.
 - It did not invent customers, reviews or statistics. All names are fictional.

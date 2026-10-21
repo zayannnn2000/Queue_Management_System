@@ -23,7 +23,7 @@ test("full staff flow: add, book, check in, call next, serve, no-show", async ({
 
   // Add a walk-in: W-001 is issued and joins the waiting list at position 1.
   await addWalkIn(page, "Tarek Mahmud");
-  await expect(page.getByText("Token issued")).toBeVisible();
+  await expect(page.getByText("In the queue. Give the patient this token.")).toBeVisible();
   await expect(page.getByRole("region", { name: "Waiting" }).getByRole("cell", { name: "W-001", exact: true })).toBeVisible();
 
   // Book an appointment for the first free slot: A-001, not queued yet.
@@ -64,6 +64,51 @@ test("full staff flow: add, book, check in, call next, serve, no-show", async ({
   const finished = page.getByRole("region", { name: "Finished today" });
   await expect(finished.getByText("Served", { exact: true })).toHaveCount(2);
   await expect(finished.getByText("No-show", { exact: true })).toHaveCount(1);
+});
+
+test("prints a token slip for a walk-in and for a checked-in appointment", async ({ page, request }) => {
+  // Replace the print dialog with a probe that records the slip on the page at print time.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __printed: string[] };
+    w.__printed = [];
+    window.print = () => {
+      w.__printed.push(document.getElementById("print-slip")?.innerText ?? "");
+    };
+  });
+  const printed = () => page.evaluate(() => (window as unknown as { __printed: string[] }).__printed);
+
+  await page.goto("/staff");
+  await addWalkIn(page, "Mahbub Alam");
+  await page.getByRole("button", { name: "Print token", exact: true }).click();
+  await expect.poll(async () => (await printed()).length).toBe(1);
+  const walkInSlip = (await printed())[0];
+  expect(walkInSlip).toContain("W-001");
+  expect(walkInSlip).toContain("Walk-in");
+  expect(walkInSlip).toContain("Place in line");
+  expect(walkInSlip).not.toContain("Mahbub"); // the slip carries no name
+  await expect(page.locator("#print-slip")).toHaveCount(0); // removed after printing
+
+  // A booked appointment gets its slip at check-in.
+  // Take the first free slot the form offers (always today, even close to midnight).
+  await page.getByRole("button", { name: "Appointment", exact: true }).click();
+  const scheduledAt = Number(await page.getByLabel("Time today").inputValue());
+  const booked = await request.post("/api/action", {
+    data: { type: "book", name: "Nusrat Jahan", service: "follow_up", scheduledAt },
+  });
+  expect(booked.ok()).toBeTruthy();
+  await page.reload();
+  await page.getByRole("button", { name: /Booked, not arrived/ }).click();
+  await page.getByRole("button", { name: "Check in A-001" }).click();
+  await page.getByRole("button", { name: "Print token", exact: true }).click();
+  await expect.poll(async () => (await printed()).length).toBe(1); // counter resets on reload
+  expect((await printed())[0]).toContain("A-001");
+  expect((await printed())[0]).toContain("Appointment");
+
+  // Reprint from the waiting list.
+  await page.getByRole("button", { name: /Waiting/ }).click();
+  await page.getByRole("button", { name: "Print token W-001" }).click();
+  await expect.poll(async () => (await printed()).length).toBe(2);
+  expect((await printed())[1]).toContain("W-001");
 });
 
 test("double-booking is refused and the slot shows as full", async ({ page, request }) => {

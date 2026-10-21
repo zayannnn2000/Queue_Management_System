@@ -134,6 +134,9 @@ function WaitingTable({ rows, onEdit }: { rows: WaitingRow[]; onEdit: (c: Custom
               <td className={`${td} num text-right text-muted`}>{clock(row.targetAt, settings)}</td>
               <td className={`${td} num text-right font-medium`}>{row.waitLabel}</td>
               <td className={`${td} text-right whitespace-nowrap`}>
+                <TextButton onClick={() => actions.print(row.token)}>
+                  Print<span className="sr-only"> token {row.token}</span>
+                </TextButton>
                 <TextButton onClick={() => onEdit(row)}>
                   Edit<span className="sr-only"> {row.token}</span>
                 </TextButton>

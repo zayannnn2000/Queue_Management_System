@@ -30,7 +30,7 @@ async function LiveConsole() {
 function ConsoleSkeleton() {
   return (
     <div className="px-4 pt-5 pb-8 md:px-6 md:pt-6" aria-busy="true">
-      <h1 className="text-[22px] leading-7 font-semibold">Front desk</h1>
+      <h1 className="font-display text-[24px] leading-7 font-semibold sm:text-[32px] sm:leading-9 tracking-[-0.01em]">Front desk</h1>
       <div className="mt-2 h-5 w-64 rounded bg-raised" />
       <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-6 min-[1280px]:grid-cols-[minmax(0,1fr)_352px]">
         <div className="flex flex-col gap-6">

@@ -26,7 +26,7 @@ export function CallStrip() {
   /** The label that fits a bar of this many minutes: the token, its digits, or nothing. */
   const fit = (token: string, ms: number) => {
     const px = (ms / WINDOW_MS) * laneWidth;
-    return px >= 46 ? token : px >= 28 ? token.slice(2) : "";
+    return px >= 56 ? token : px >= 34 ? token.slice(2) : "";
   };
   const { now, settings } = view;
   const pct = (ms: number) => `${(Math.min(Math.max(ms - now, 0), WINDOW_MS) / WINDOW_MS) * 100}%`;
@@ -119,7 +119,7 @@ function Bar({
   return (
     <span
       title={title}
-      className={`absolute top-1 flex h-6 items-center overflow-hidden rounded-full px-2 font-mono text-xs font-medium whitespace-nowrap ${toneClass}`}
+      className={`absolute top-1 flex h-6 items-center overflow-hidden rounded-full px-2 font-token text-xs whitespace-nowrap ${toneClass}`}
       // A 3px gap keeps neighbouring pills apart.
       style={{ left, width: `max(0px, calc(${width} - 3px))` }}
     >

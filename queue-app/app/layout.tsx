@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Mono, Manrope } from "next/font/google";
+import { Cormorant_Garamond, Manrope } from "next/font/google";
+import { Splash } from "@/components/splash";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -8,10 +9,10 @@ const manrope = Manrope({
   weight: ["400", "500", "600", "700"],
 });
 
-const dmMono = DM_Mono({
-  variable: "--font-dm-mono",
+const cormorant = Cormorant_Garamond({
+  variable: "--font-cormorant",
   subsets: ["latin"],
-  weight: ["400", "500"],
+  weight: ["500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -25,8 +26,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${manrope.variable} ${dmMono.variable} h-full antialiased`}>
-      <body className="min-h-full">{children}</body>
+    <html lang="en" className={`${manrope.variable} ${cormorant.variable} h-full antialiased`}>
+      <body className="min-h-full">
+        <Splash />
+        {children}
+      </body>
     </html>
   );
 }

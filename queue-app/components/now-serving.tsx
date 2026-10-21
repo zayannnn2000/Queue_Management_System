@@ -56,7 +56,7 @@ function ServingCounter({ counter }: { counter: CounterView }) {
     <article className="rounded-lg border border-border bg-surface p-5" aria-label={`Counter ${counter.counter}`}>
       <CounterHeader counter={counter.counter} status="Serving" />
       <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-1">
-        <Token className="text-[28px] leading-8">{current.token}</Token>
+        <Token className="font-display text-[44px] leading-[44px] font-semibold tracking-normal">{current.token}</Token>
         <p className="pb-0.5 text-base">
           {current.name}
           <span className="text-muted"> · {serviceName(view.settings, current.service)}</span>

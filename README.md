@@ -47,6 +47,13 @@ queue-app/
   tests/, e2e/            Vitest and Playwright
 ```
 
+## Printing token slips
+
+When a walk-in is added or an appointment checks in, the front desk shows the token with a **Print token**
+button; every row in the Waiting list also has **Print** for a reprint. The slip carries the token, booking,
+service, place in line, estimated wait, the time issued and the display link for that token. It shows no
+patient name. It's laid out for an 80 mm receipt printer and prints on any printer through the browser's print dialog.
+
 ## Ordering rule
 
 Every checked-in patient has a **target time**:

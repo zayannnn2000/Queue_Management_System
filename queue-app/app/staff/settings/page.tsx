@@ -13,7 +13,7 @@ export default function SettingsPage() {
     <Suspense
       fallback={
         <div className="px-4 pt-5 md:px-6 md:pt-6" aria-busy="true">
-          <h1 className="text-[22px] leading-7 font-semibold">Settings</h1>
+          <h1 className="font-display text-[24px] leading-7 font-semibold sm:text-[32px] sm:leading-9 tracking-[-0.01em]">Settings</h1>
         </div>
       }
     >

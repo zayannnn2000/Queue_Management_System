@@ -59,7 +59,7 @@ export const Pill = {
 /** A token as patients see it on their slip: IBM Plex Mono, the product's one ID face. */
 export function Token({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <span translate="no" className={`font-mono font-medium ${className}`}>
+    <span translate="no" className={`${className.includes("font-display") ? "" : "font-token"} ${className}`}>
       {children}
     </span>
   );

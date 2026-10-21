@@ -10,7 +10,7 @@ export function SettingsView() {
   const { notice } = state;
   return (
     <div className="px-4 pt-5 pb-10 md:px-6 md:pt-6">
-      <h1 className="text-[22px] leading-7 font-semibold">Settings</h1>
+      <h1 className="font-display text-[24px] leading-7 font-semibold sm:text-[32px] sm:leading-9 tracking-[-0.01em]">Settings</h1>
       <p className="mt-1 text-[15px] text-muted">Counters, grace period and service times for today&apos;s queue.</p>
       <div role="status" aria-live="polite" className="mt-3 min-h-8">
         {notice ? (

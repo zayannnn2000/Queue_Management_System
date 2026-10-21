@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { MAX_NAME_LENGTH } from "@/lib/queue";
 import { slotOptions } from "./format";
 import { useQueue } from "./queue-provider";
+import { TokenReady } from "./token-slip";
 import { Field, Panel, PrimaryButton, Token, inputClass } from "./ui";
 
 type Kind = "walk_in" | "appointment";
@@ -12,7 +12,7 @@ type Kind = "walk_in" | "appointment";
 /** Add a patient: a segmented switch between the walk-in and appointment forms. */
 export function CustomerForm() {
   const [kind, setKind] = useState<Kind>("walk_in");
-  const [issued, setIssued] = useState<string | null>(null);
+  const [booked, setBooked] = useState<string | null>(null);
 
   return (
     <Panel title="Add patient" id="add-heading">
@@ -38,9 +38,14 @@ export function CustomerForm() {
           ))}
         </div>
 
-        {kind === "walk_in" ? <WalkInForm onIssued={setIssued} /> : <AppointmentForm onIssued={setIssued} />}
+        {kind === "walk_in" ? (
+          <WalkInForm onIssued={() => setBooked(null)} />
+        ) : (
+          <AppointmentForm onIssued={setBooked} />
+        )}
 
-        {issued ? <IssuedToken token={issued} /> : null}
+        <TokenReady />
+        {booked ? <BookedNote token={booked} /> : null}
       </div>
     </Panel>
   );
@@ -95,7 +100,7 @@ function NameAndService({
   );
 }
 
-function WalkInForm({ onIssued }: { onIssued: (token: string) => void }) {
+function WalkInForm({ onIssued }: { onIssued: () => void }) {
   const { state, actions, meta } = useQueue();
   const [name, setName] = useState("");
   const [service, setService] = useState(state.view.settings.services[0].id);
@@ -107,7 +112,7 @@ function WalkInForm({ onIssued }: { onIssued: (token: string) => void }) {
     const res = await actions.run({ type: "addWalkIn", name: submitted, service });
     setError(res.ok ? null : res.error);
     if (res.ok && res.issued) {
-      onIssued(res.issued);
+      onIssued();
       // Clear only if staff haven't started typing the next patient meanwhile.
       setName((current) => (current === submitted ? "" : current));
     }
@@ -194,18 +199,13 @@ export function FormError({ error }: { error: string | null }) {
   );
 }
 
-function IssuedToken({ token }: { token: string }) {
+/** After a phone booking: the token to quote. The slip is printed when they check in. */
+function BookedNote({ token }: { token: string }) {
   return (
     <div className="mt-5 rounded-lg bg-raised p-4" aria-live="polite">
-      <p className="text-xs text-muted">Token issued. Give the patient this number.</p>
-      <Token className="mt-1 block text-[28px] leading-8">{token}</Token>
-      <Link
-        href={`/display?token=${encodeURIComponent(token)}`}
-        target="_blank"
-        className="mt-2 inline-block text-sm text-accent hover:underline"
-      >
-        Their status on the display ↗<span className="sr-only"> (opens in a new tab)</span>
-      </Link>
+      <p className="text-xs text-muted">Appointment booked. Quote this token to the patient.</p>
+      <Token className="mt-1 block font-display text-[34px] leading-9 font-semibold tracking-normal">{token}</Token>
+      <p className="mt-2 text-xs text-muted">Print their slip when they arrive and check in.</p>
     </div>
   );
 }

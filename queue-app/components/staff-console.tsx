@@ -7,15 +7,17 @@ import { minutes } from "./format";
 import { NowServing } from "./now-serving";
 import { QueueLists } from "./queue-lists";
 import { useQueue } from "./queue-provider";
+import { PrintSlip } from "./token-slip";
 import { Panel } from "./ui";
 
 /**
- * Front desk. Grid at 1440: sheet 1204 − 2 × 24 padding = 1156 = 780 main + 24 gap + 352 rail.
+ * Front desk. Grid at 1440: sheet 1184 − 2 × 32 padding = 1120 = 744 main + 24 gap + 352 rail.
  * Below 1280 the rail stacks under the main column.
  */
 export function StaffConsole() {
   return (
-    <div className="px-4 pt-5 pb-8 md:px-6 md:pt-6">
+    <div className="px-4 pt-6 pb-10 md:px-8 md:pt-8">
+      <PrintSlip />
       <TitleRow />
       <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-6 min-[1280px]:grid-cols-[minmax(0,1fr)_352px]">
         <div className="flex min-w-0 flex-col gap-6">
@@ -54,8 +56,8 @@ function TitleRow() {
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
       <div>
-        <h1 className="text-[22px] leading-7 font-semibold">Front desk</h1>
-        <p className="mt-1 text-[15px] text-muted">{finding(view)}</p>
+        <h1 className="font-display text-[24px] leading-7 font-semibold sm:text-[32px] sm:leading-9 tracking-[-0.01em]">Front desk</h1>
+        <p className="mt-2 text-[15px] text-muted">{finding(view)}</p>
       </div>
       <div className="flex items-center lg:ml-auto lg:min-h-8 lg:max-w-[52%]" role="status" aria-live="polite">
         {stale ? (

@@ -31,11 +31,18 @@ interface QueueContextValue {
     notice: Notice | null;
     lastCall: CallRecord | null;
     stale: boolean;
+    /** Token that just joined the queue (walk-in added or appointment checked in), ready to print. */
+    ready: string | null;
+    /** Token whose slip is being printed right now. */
+    printing: string | null;
   };
   actions: {
     /** Runs a staff action on the server. Never rejects: failures resolve with `ok: false`. */
     run: (action: StaffAction) => Promise<ActionOutcome>;
     dismiss: () => void;
+    /** Opens the browser's print dialog with only this token's slip on the page. */
+    print: (token: string) => void;
+    clearReady: () => void;
   };
   meta: { pending: boolean };
 }
@@ -62,8 +69,20 @@ export function QueueProvider({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [lastCall, setLastCall] = useState<CallRecord | null>(null);
   const [stale, setStale] = useState(false);
+  const [ready, setReady] = useState<string | null>(null);
+  const [printing, setPrinting] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const inFlight = useRef(0);
+
+  // Print once the slip for `printing` has rendered, then take it off the page.
+  useEffect(() => {
+    if (!printing) return;
+    const frame = window.requestAnimationFrame(() => {
+      window.print();
+      setPrinting(null);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [printing]);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,6 +128,8 @@ export function QueueProvider({
           setView(data.view);
           setStale(false);
           if (data.called) setLastCall(data.called);
+          if (action.type === "addWalkIn" && data.issued) setReady(data.issued);
+          if (action.type === "checkIn") setReady(action.id);
           if (data.message) setNotice({ kind: "ok", text: data.message, at: Date.now() });
           resolve({ ok: true, message: data.message, called: data.called, issued: data.issued ?? null });
         } catch {
@@ -123,12 +144,14 @@ export function QueueProvider({
   }, []);
 
   const dismiss = useCallback(() => setNotice(null), []);
+  const print = useCallback((token: string) => setPrinting(token), []);
+  const clearReady = useCallback(() => setReady(null), []);
 
   return (
     <QueueContext
       value={{
-        state: { view, storage, notice, lastCall, stale },
-        actions: { run, dismiss },
+        state: { view, storage, notice, lastCall, stale, ready, printing },
+        actions: { run, dismiss, print, clearReady },
         meta: { pending },
       }}
     >

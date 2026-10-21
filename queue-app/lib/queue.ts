@@ -622,6 +622,10 @@ export interface WaitingRow extends Customer {
   targetAt: number;
   waitMs: number;
   waitLabel: string;
+  /** Projected counter and start time from the simulation, plus the expected service length. */
+  projectedCounter: number;
+  startAt: number;
+  expectedMs: number;
 }
 
 export interface BookedRow extends Customer {
@@ -631,6 +635,8 @@ export interface BookedRow extends Customer {
 export interface CounterView {
   counter: number;
   current: Customer | null;
+  /** When the current customer is expected to finish (at least 1 min from now). */
+  expectedEndAt: number | null;
   lastCall: CallRecord | null;
 }
 
@@ -649,11 +655,21 @@ export interface QueueView {
 
 export function buildView(state: QueueState, now: number): QueueView {
   const projection = new Map(simulate(state, now).map((p) => [p.id, p]));
+  const expectedMs = (serviceId: string) => expectedDuration(state.customers, state.settings, serviceId).ms;
   const waiting = state.customers
     .filter((c) => c.status === "waiting")
     .map((c) => {
       const p = projection.get(c.id)!;
-      return { ...c, position: p.position, targetAt: targetTime(c), waitMs: p.waitMs, waitLabel: formatWait(p.waitMs) };
+      return {
+        ...c,
+        position: p.position,
+        targetAt: targetTime(c),
+        waitMs: p.waitMs,
+        waitLabel: formatWait(p.waitMs),
+        projectedCounter: p.counter,
+        startAt: p.startAt,
+        expectedMs: expectedMs(c.service),
+      };
     })
     .sort((a, b) => a.position - b.position);
 
@@ -668,11 +684,17 @@ export function buildView(state: QueueState, now: number): QueueView {
     day: state.day,
     version: state.version,
     settings: state.settings,
-    counters: Array.from({ length: state.settings.counters }, (_, i) => ({
-      counter: i + 1,
-      current: servingAt(state, i + 1) ?? null,
-      lastCall: state.lastCalls[String(i + 1)] ?? null,
-    })),
+    counters: Array.from({ length: state.settings.counters }, (_, i) => {
+      const current = servingAt(state, i + 1) ?? null;
+      return {
+        counter: i + 1,
+        current,
+        expectedEndAt: current
+          ? now + Math.max(expectedMs(current.service) - (now - current.calledAt!), MINUTE)
+          : null,
+        lastCall: state.lastCalls[String(i + 1)] ?? null,
+      };
+    }),
     waiting,
     booked: state.customers
       .filter((c) => c.status === "booked")

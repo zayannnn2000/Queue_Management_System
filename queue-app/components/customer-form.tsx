@@ -1,0 +1,195 @@
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+import { MAX_NAME_LENGTH } from "@/lib/queue";
+import { slotOptions } from "./format";
+import { useQueue } from "./queue-provider";
+import { Field, Panel, PrimaryButton, Token, inputClass } from "./ui";
+
+type Kind = "walk_in" | "appointment";
+
+/** Add a patient: a segmented switch between the walk-in and appointment forms. */
+export function CustomerForm() {
+  const [kind, setKind] = useState<Kind>("walk_in");
+  const [issued, setIssued] = useState<string | null>(null);
+
+  return (
+    <Panel title="Add patient" id="add-heading">
+      <div className="px-5 pb-5">
+        <div role="radiogroup" aria-label="Booking type" className="inline-flex rounded-md bg-raised p-0.5">
+          {(
+            [
+              ["walk_in", "Walk-in"],
+              ["appointment", "Appointment"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={kind === id}
+              onClick={() => setKind(id)}
+              className={`h-8 rounded-[5px] border px-3 text-sm transition-colors ${
+                kind === id ? "border-border bg-surface font-medium text-ink" : "border-transparent text-muted hover:text-ink"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {kind === "walk_in" ? <WalkInForm onIssued={setIssued} /> : <AppointmentForm onIssued={setIssued} />}
+
+        {issued ? <IssuedToken token={issued} /> : null}
+      </div>
+    </Panel>
+  );
+}
+
+function NameAndService({
+  name,
+  setName,
+  service,
+  setService,
+  prefix,
+}: {
+  name: string;
+  setName: (v: string) => void;
+  service: string;
+  setService: (v: string) => void;
+  prefix: string;
+}) {
+  const { state } = useQueue();
+  const { settings, expected } = state.view;
+  return (
+    <>
+      <Field label="Patient name" htmlFor={`${prefix}-name`}>
+        <input
+          id={`${prefix}-name`}
+          name="name"
+          className={inputClass}
+          value={name}
+          maxLength={MAX_NAME_LENGTH}
+          required
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </Field>
+      <Field label="Service" htmlFor={`${prefix}-service`}>
+        <select
+          id={`${prefix}-service`}
+          name="service"
+          className={inputClass}
+          value={service}
+          onChange={(e) => setService(e.target.value)}
+        >
+          {settings.services.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name} · about {Math.round(expected[s.id]?.minutes ?? s.defaultMinutes)} min
+            </option>
+          ))}
+        </select>
+      </Field>
+    </>
+  );
+}
+
+function WalkInForm({ onIssued }: { onIssued: (token: string) => void }) {
+  const { state, actions, meta } = useQueue();
+  const [name, setName] = useState("");
+  const [service, setService] = useState(state.view.settings.services[0].id);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = await actions.run({ type: "addWalkIn", name, service });
+    if (res?.issued) {
+      onIssued(res.issued);
+      setName("");
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="mt-4 flex flex-col gap-4" aria-label="Add walk-in">
+      <NameAndService name={name} setName={setName} service={service} setService={setService} prefix="walkin" />
+      <p className="text-xs text-muted">Joins the queue now. Their target time is their arrival.</p>
+      <PrimaryButton type="submit" disabled={meta.pending} className="h-10 self-start">
+        Add walk-in
+      </PrimaryButton>
+    </form>
+  );
+}
+
+function AppointmentForm({ onIssued }: { onIssued: (token: string) => void }) {
+  const { state, actions, meta } = useQueue();
+  const { view } = state;
+  const [name, setName] = useState("");
+  const [service, setService] = useState(view.settings.services[0].id);
+  const slots = slotOptions(view, service);
+  const firstFree = slots.find((s) => !s.clash)?.value ?? 0;
+  const [chosen, setChosen] = useState<number | null>(null);
+  const scheduledAt = chosen !== null && slots.some((s) => s.value === chosen && !s.clash) ? chosen : firstFree;
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = await actions.run({ type: "book", name, service, scheduledAt });
+    if (res?.issued) {
+      onIssued(res.issued);
+      setName("");
+      setChosen(null);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="mt-4 flex flex-col gap-4" aria-label="Book appointment">
+      <NameAndService name={name} setName={setName} service={service} setService={setService} prefix="appt" />
+      <Field
+        label="Time today"
+        htmlFor="appt-time"
+        hint={`Full slots are greyed out: ${view.settings.counters} counter${view.settings.counters > 1 ? "s" : ""}, no overlaps beyond that.`}
+      >
+        {slots.length === 0 ? (
+          <p className="text-sm text-muted">No slots left today.</p>
+        ) : (
+          <select
+            id="appt-time"
+            name="time"
+            className={inputClass}
+            value={scheduledAt}
+            onChange={(e) => setChosen(Number(e.target.value))}
+          >
+            {slots.map((s) => (
+              <option key={s.value} value={s.value} disabled={s.clash !== null}>
+                {s.label}
+                {s.clash ? " (full)" : ""}
+              </option>
+            ))}
+          </select>
+        )}
+      </Field>
+      <p className="text-xs text-muted">
+        Not queued until they check in. Arriving more than {view.settings.graceMinutes} min late makes them a walk-in.
+      </p>
+      <PrimaryButton type="submit" disabled={meta.pending || !firstFree} className="h-10 self-start">
+        Book appointment
+      </PrimaryButton>
+    </form>
+  );
+}
+
+function IssuedToken({ token }: { token: string }) {
+  return (
+    <div className="mt-5 rounded-lg bg-raised p-4" aria-live="polite">
+      <p className="text-xs text-muted">Token issued. Give the patient this number.</p>
+      <Token className="mt-1 block text-[28px] leading-8">{token}</Token>
+      <Link
+        href={`/display?token=${encodeURIComponent(token)}`}
+        target="_blank"
+        className="mt-2 inline-block text-sm text-accent hover:underline"
+      >
+        Their status on the display ↗<span className="sr-only"> (opens in a new tab)</span>
+      </Link>
+    </div>
+  );
+}

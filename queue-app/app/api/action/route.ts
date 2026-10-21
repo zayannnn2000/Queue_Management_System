@@ -23,10 +23,13 @@ export async function POST(request: Request) {
           }
         : applyAction(state, body, now),
     );
+    const issued =
+      body.type === "addWalkIn" || body.type === "book" ? (result.state.customers.at(-1)?.token ?? null) : null;
     return Response.json({
       ok: true,
       message: result.message ?? null,
       called: "called" in result ? (result.called ?? null) : null,
+      issued,
       view: buildView(result.state, now),
       storage: storageKind,
     });

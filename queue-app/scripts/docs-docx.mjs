@@ -51,7 +51,6 @@ const p = (text, opts = {}) => new Paragraph({ spacing: { after: 80 }, ...opts, 
 const bullet = (text) => new Paragraph({ numbering: { reference: "bullets", level: 0 }, spacing: { after: 40 }, children: runs(text) });
 const step = (text, ref = "steps") => new Paragraph({ numbering: { reference: ref, level: 0 }, spacing: { after: 40 }, children: runs(text) });
 const h1 = (text) => new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun(text)] });
-const h2 = (text) => new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun(text)] });
 
 const thin = { style: BorderStyle.SINGLE, size: 4, color: RULE };
 const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };

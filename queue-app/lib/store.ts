@@ -4,7 +4,7 @@
 
 import "server-only";
 import { Redis } from "@upstash/redis";
-import { type QueueState, createState, rolloverIfNewDay } from "./queue";
+import { type QueueState, createState, rolloverIfNewDay, upgradeState } from "./queue";
 
 export type StorageKind = "redis" | "memory";
 
@@ -95,7 +95,7 @@ export async function clearFailedAttempts(client: string): Promise<void> {
 /** Current state, rolled over to a fresh queue if the clinic-local date has changed. */
 export async function loadState(now: number): Promise<QueueState> {
   const stored = await store.read();
-  const state = stored ? rolloverIfNewDay(stored, now) : createState(now);
+  const state = stored ? rolloverIfNewDay(upgradeState(stored, now), now) : createState(now);
   if (state !== stored) await store.write(state, stored?.version ?? null);
   return state;
 }
@@ -110,7 +110,7 @@ export async function mutate<T extends { state: QueueState }>(
 ): Promise<T> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const stored = await store.read();
-    const current = stored ? rolloverIfNewDay(stored, now) : createState(now);
+    const current = stored ? rolloverIfNewDay(upgradeState(stored, now), now) : createState(now);
     const result = apply(current);
     if (result.state === stored) return result;
     if (await store.write(result.state, stored?.version ?? null)) return result;

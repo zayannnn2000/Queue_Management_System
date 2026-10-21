@@ -1,6 +1,7 @@
-# CLAUDE.md — Token-Based Queue Management System
+# CLAUDE.md — Token-Based Queue Management System (Hygieia Wellness Clinic)
 
-Final rules agreed in the /grill-me session (2026-10-21). These are the source of truth for
+Rules agreed in the /grill-me session (2026-10-21), revised on 2026-10-22 to per-service queues,
+staff priority and "appointments first at their time". These are the source of truth for
 `queue-app/lib/queue.ts`. Priority if anything conflicts:
 `docs/Queue_Management_Initial_Guidelines.md` > this file > `project-brief.md`.
 If a build instruction conflicts with these, stop and ask.
@@ -12,119 +13,86 @@ If a build instruction conflicts with these, stop and ask.
 - Next.js (App Router) + TypeScript + Tailwind in `queue-app/`.
 - All queue logic lives in `queue-app/lib/queue.ts` as **pure functions** (no I/O, no UI,
   `now` always passed in). Run Vitest after every change to it.
-- Commit after each stage. Fictional sample data only.
+- Fictional sample data only. Staff pages behind a shared staff PIN (`STAFF_PIN`).
 
-## Configuration (defaults, all editable in settings)
+## Queues and rooms
 
-| Setting | Default |
-|---|---|
-| Theme | Clinic |
-| Timezone ("today") | Asia/Dhaka |
-| Counters | 1 (range 1–4) |
-| Grace period | 10 min |
-| General consultation | 15 min |
-| Follow-up | 10 min |
-| Blood test | 5 min |
-| Vaccination | 5 min |
-| Prescription renewal | 5 min |
+- **One front desk** issues tokens. Every patient joins the **queue of their service**.
+- **Five service queues**, each served by its own room(s), which call only from that queue:
+
+| Service | Letter | Default length | Rooms (default) |
+|---|---|---|---|
+| Consultation | C | 15 min | 1 (`Consultation · Room 1`) |
+| Follow-up | F | 10 min | 1 |
+| Blood test | B | 5 min | 1 |
+| Vaccination | V | 5 min | 1 |
+| Prescription renewal | P | 5 min | 1 |
+
+- Rooms per service are editable in Settings (1–4). Other settings: timezone Asia/Dhaka,
+  grace period 10 min, **walk-in protection 30 min** (0 = off), default lengths.
 
 ## Tokens and days
 
-- Walk-ins: `W-001`, `W-002`, … Appointments: `A-001`, `A-002`, … Separate sequences.
-- Tokens reset daily. The first request on a new Asia/Dhaka date starts a fresh queue;
-  a manual **Reset day** button also exists.
-- A token never changes once issued (including on edit or late conversion).
+- Token = **service letter + W (walk-in) or A (appointment) + 3 digits**: `CW-004`, `BA-002`.
+  Each prefix has its own sequence. All restart daily (first request on a new Dhaka date) and on
+  **Reset day**.
+- A token never changes once issued. Changing a patient's **service** is not an edit: cancel
+  and add them again (the new service is a different queue with its own token).
 
-## Customer data
+## Patients
 
-- Fields collected: **name** (required, 1–40 chars, fictional) and **service**. Nothing else.
-- Model: `Customer { id, token, name, type: 'walk_in'|'appointment', service, scheduledAt?,
-  arrivedAt?, checkedIn, status: 'booked'|'waiting'|'serving'|'served'|'no_show'|'cancelled',
-  calledAt?, servedAt?, counter?, lateConverted }`
+- Fields: **name** (required, 1–40 chars, fictional) and **service**. Nothing else.
+- Walk-in: added → `waiting`, `arrivedAt = now`, target = arrival.
+- Appointment: booked for today, now or later, 5-minute slots → `booked` (not queued).
+  **No double-booking within a service**: overlapping active appointments of that service may
+  not exceed its rooms. Reducing rooms never cancels bookings; Settings lists over-capacity
+  overlaps.
+- Check-in → `waiting`, `arrivedAt = now`. Within scheduled + grace → target = scheduled time.
+  Later → late-converted: keeps its A-token, joins as a walk-in, target = arrival.
+- Overdue booked appointments are flagged; staff check in, mark no-show or cancel.
+- Edits (name, appointment time) while booked or waiting; locked once called.
 
-## Walk-ins
+## Priority (staff)
 
-- Added by staff → status `waiting`, `arrivedAt = now`, **target = arrival time**.
+- Staff may flag a **waiting** patient as **Priority** with a reason: Elderly, Pregnant,
+  Disability, Urgent, Other. `priority = { reason, at }`. Staff may remove the flag.
+- **Call now**: when a room is free, staff may call any waiting patient of that room's service
+  directly. The reason shown is "called by staff".
 
-## Appointments
+## Call next (per room, executed server-side, within the room's service queue)
 
-- **Booking**: today only, scheduled time **now or later**, 5-minute steps. Someone already
-  present is added as a walk-in instead. Status `booked` (not in the queue).
-- **No double-booking**: an appointment's window = `scheduledAt` → `scheduledAt +` service
-  default duration. Reject a booking (or edit) if the number of active appointments
-  (`booked` or `waiting` appointment-type, not late-converted) overlapping that window would
-  exceed the number of counters. With 1 counter, no overlap at all. The error names the clash,
-  e.g. "10:30–10:45 clashes with A-002 (10:35)".
-- **Counters reduced later**: existing bookings are kept, never auto-cancelled; settings show a
-  warning listing over-capacity overlaps. Only new bookings/edits are checked against the new
-  limit.
-- **Check-in** (staff action) → status `waiting`, `arrivedAt = now`:
-  - `arrivedAt ≤ scheduledAt + grace` (on time or early) → **target = scheduledAt**.
-  - `arrivedAt > scheduledAt + grace` → **late-converted**: `lateConverted = true`, keeps its
-    A-token, shows a "Late → walk-in" badge, **target = arrivedAt**, ranks as a walk-in in ties.
-- **Overdue**: a `booked` appointment past `scheduledAt + grace` shows an **Overdue** flag.
-  Staff may Check in (→ late conversion), mark No-show, or Cancel. Nothing is automatic and it
-  never blocks the queue.
-- **Early appointments** keep target = scheduledAt; they are served early only via idle-fill.
+At time `t`, among that service's `waiting` patients (none → room stays free):
+1. **Priority** patients first, earliest `priority.at` first (always treated as due).
+2. **Due appointments** (not late-converted, scheduled ≤ t) and **protected walk-ins**
+   (walk-ins or late-converted with `t − arrivedAt ≥ protection`), ordered by target time.
+3. **Other due walk-ins**, by arrival.
+4. Nobody due → the **earliest upcoming** target (idle-fill).
+5. Ties: appointment first, then lower token number.
+- With protection 0, step 2 contains due appointments only.
+- Close-out: Served, No-show, Served & call next (only while someone else waits in that queue).
+- The reason for every call is shown (who and why).
 
-## Editing
+## Wait-time estimate (per service queue)
 
-- Name, service, and (appointments) scheduled time are editable while `booked` or `waiting`.
-  Locked once called.
-- Editing a scheduled time re-runs the double-booking check.
-- Editing a checked-in appointment's scheduled time re-evaluates lateness against its recorded
-  `arrivedAt` (may convert to, or back from, late walk-in).
-
-## Call next (per counter, executed server-side)
-
-1. Candidates = customers with status `waiting` (checked in). Booked/not-arrived excluded.
-   None → counter stays idle.
-2. Anyone **due** (`target ≤ now`)? → call the **earliest target**.
-3. Nobody due → call the **earliest upcoming target** (idle-fill, avoids an idle counter).
-4. **Ties** (equal target): appointment (non-late-converted) first, then lower token number
-   within the same type.
-5. Called customer → status `serving`, `calledAt = now`, `counter = n`.
-6. Return **who** and **why** (e.g. "A-003 called: appointment due at 10:30, earliest due
-   target"); UI shows it.
-7. "Call next" is disabled while that counter is serving. Close-out actions: **Served**,
-   **No-show**, and a **Served & call next** shortcut.
-8. No "Return to queue". A no-show who turns up later is re-added as a new walk-in.
-9. `waiting` or `booked` customers may be **Cancelled**.
-10. Writes use a version check so two staff can't call the same customer.
-11. After every change, recompute all waits; the display refreshes.
-
-## Wait-time estimate
-
-- **Expected duration per service** = mean of the last 5 `served` durations
-  (`servedAt − calledAt`) for that service, each sample clamped to
-  `[1 min, 3 × default]`. Fewer than 5 samples → mean of what exists; none → default.
-  No-shows and cancellations never count.
-- **Counter free time** = `now` if idle, else `now + max(expected − elapsed, 1 min)`.
-- **Forward simulation**: repeatedly take the earliest-free counter at time `t`, apply the
-  **exact call-next rule at `t`** (earliest due target with `target ≤ t`, else earliest
-  upcoming), start = `t`, that counter becomes free at `t + expected(service)`.
-  `wait = start − now`; **position** = order in this projection (1 = next called).
-- **Display**: `wait ≤ 2 min` → "Due now"; otherwise "~X min" with X rounded **up** to the
-  next multiple of 5.
+- Expected length per service = mean of last 5 served visits, each clamped to
+  [1 min, 3 × default]; none → default. No-shows never count.
+- Each room of the service is free at now (idle) or now + max(expected − elapsed, 1 min).
+- Forward simulation per service: take the room that frees first at `t`, apply the call-next
+  rule at `t`, start = `t`, room free again at `t + expected`. Wait = start − now; position =
+  order within the service queue.
+- Shown as "Due now" (≤ 2 min) or "~X min" rounded up to 5.
 
 ## Screens
 
-- `/staff`: add-customer form (walk-in / appointment), Booked list (Check in, No-show,
-  Cancel, Edit, Overdue flag), waiting queue table (token, name, type, service, target,
-  position, wait, late badge, Edit, Cancel), counter cards (now serving, Call next, Served,
-  No-show, Served & call next, last "who & why"), settings (counters, grace, service
-  durations, capacity warning), Seed and Reset day buttons. **No login** — documented
-  limitation.
-- `/display`: read-only TV board. Token + first-name initial only (e.g. "W-004 · S."),
-  now-serving per counter, waiting list with position and wait. Booked-but-not-arrived
-  appointments hidden. Polls every 3 s. `/display?token=W-004` highlights that row.
+- `/staff`: room cards (one per service room: now serving, Call next, Served, No-show, Served &
+  call next, why), Add patient, Next-hour strip (one lane per room), lists filterable by service
+  with Priority / Call now / Print / Edit / Cancel, service times. Settings: rooms per service,
+  grace, walk-in protection, lengths, sample day, reset day.
+- `/display`: one panel per service: now serving (token, initial, room), the next tokens with
+  wait. `?token=` / Find my token highlights a patient and names their room.
+- Token slip: token, service, room, booking, place, wait, issued time, QR to the display.
 
-## Storage
+## Seed data
 
-- Upstash Redis (Vercel Marketplace) behind Next.js API routes, 3 s polling.
-- Local dev without Redis: in-memory / file store so the API still works.
-
-## Seed data ("Seed" replaces today's data, times relative to now)
-
-About 10 fictional customers: 3 served (to fill averages), 1 serving, 3 waiting walk-ins,
-1 early checked-in appointment, 1 booked appointment due later, 1 overdue booked appointment.
+Fictional, relative to now, spread over the five services: some served (fills averages), some
+being served, waiting walk-ins, an early checked-in appointment, a booked one, an overdue one.

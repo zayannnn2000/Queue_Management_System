@@ -1,5 +1,8 @@
 // Pure queue logic. No I/O, no UI, no clocks: every function that depends on time takes `now`.
 // The rules implemented here are specified in CLAUDE.md at the repository root.
+//
+// Model: one front desk issues tokens into one queue per service; each service has its own
+// room(s), which call only from that service's queue.
 
 import { MINUTE, dayKey, formatClock, isSlotAligned } from "./time";
 
@@ -10,15 +13,23 @@ import { MINUTE, dayKey, formatClock, isSlotAligned } from "./time";
 export type CustomerType = "walk_in" | "appointment";
 export type Status = "booked" | "waiting" | "serving" | "served" | "no_show" | "cancelled";
 
+export const PRIORITY_REASONS = ["Elderly", "Pregnant", "Disability", "Urgent", "Other"] as const;
+export type PriorityReason = (typeof PRIORITY_REASONS)[number];
+
 export interface Service {
   id: string;
   name: string;
+  /** Token prefix letter: C, F, B, V, P. */
+  letter: string;
   defaultMinutes: number;
+  /** Rooms serving this service's queue (1–4). */
+  rooms: number;
 }
 
 export interface Settings {
-  counters: number;
   graceMinutes: number;
+  /** A walk-in who has waited this long is not pushed back by due appointments. 0 = off. */
+  protectionMinutes: number;
   timezone: string;
   services: Service[];
 }
@@ -36,12 +47,14 @@ export interface Customer {
   status: Status;
   calledAt?: number;
   servedAt?: number;
-  counter?: number;
+  /** Room id (`<serviceId>:<n>`) while being served and after. */
+  room?: string;
   lateConverted: boolean;
+  priority?: { reason: PriorityReason; at: number };
 }
 
 export interface CallRecord {
-  counter: number;
+  room: string;
   customerId: string;
   token: string;
   reason: string;
@@ -53,8 +66,9 @@ export interface QueueState {
   day: string;
   settings: Settings;
   customers: Customer[];
-  seq: { W: number; A: number };
-  /** Latest "who and why" per counter, keyed by counter number. */
+  /** Last number issued per token prefix, e.g. { CW: 4, BA: 1 }. */
+  seq: Record<string, number>;
+  /** Latest "who and why" per room id. */
   lastCalls: Record<string, CallRecord>;
 }
 
@@ -63,15 +77,18 @@ export type Action =
   | { type: "book"; name: string; service: string; scheduledAt: number }
   | { type: "checkIn"; id: string }
   | { type: "edit"; id: string; name?: string; service?: string; scheduledAt?: number }
-  | { type: "callNext"; counter: number }
-  | { type: "serve"; counter: number; callNext?: boolean }
+  | { type: "callNext"; room: string }
+  | { type: "callPatient"; room: string; id: string }
+  | { type: "serve"; room: string; callNext?: boolean }
   | { type: "noShow"; id: string }
   | { type: "cancel"; id: string }
+  | { type: "setPriority"; id: string; reason: PriorityReason | null }
   | {
       type: "updateSettings";
-      counters?: number;
       graceMinutes?: number;
+      protectionMinutes?: number;
       durations?: Record<string, number>;
+      rooms?: Record<string, number>;
     }
   | { type: "resetDay" };
 
@@ -93,21 +110,21 @@ export class QueueError extends Error {
 // Configuration
 // ---------------------------------------------------------------------------
 
-export const MAX_COUNTERS = 4;
+export const MAX_ROOMS = 4;
 export const MAX_NAME_LENGTH = 40;
 export const DURATION_SAMPLES = 5;
 export const DUE_NOW_MS = 2 * MINUTE;
 
 export const DEFAULT_SETTINGS: Settings = {
-  counters: 1,
   graceMinutes: 10,
+  protectionMinutes: 30,
   timezone: "Asia/Dhaka",
   services: [
-    { id: "consultation", name: "General consultation", defaultMinutes: 15 },
-    { id: "follow_up", name: "Follow-up", defaultMinutes: 10 },
-    { id: "blood_test", name: "Blood test", defaultMinutes: 5 },
-    { id: "vaccination", name: "Vaccination", defaultMinutes: 5 },
-    { id: "prescription", name: "Prescription renewal", defaultMinutes: 5 },
+    { id: "consultation", name: "General consultation", letter: "C", defaultMinutes: 15, rooms: 1 },
+    { id: "follow_up", name: "Follow-up", letter: "F", defaultMinutes: 10, rooms: 1 },
+    { id: "blood_test", name: "Blood test", letter: "B", defaultMinutes: 5, rooms: 1 },
+    { id: "vaccination", name: "Vaccination", letter: "V", defaultMinutes: 5, rooms: 1 },
+    { id: "prescription", name: "Prescription renewal", letter: "P", defaultMinutes: 5, rooms: 1 },
   ],
 };
 
@@ -117,7 +134,7 @@ export function createState(now: number, settings: Settings = DEFAULT_SETTINGS):
     day: dayKey(now, settings.timezone),
     settings,
     customers: [],
-    seq: { W: 0, A: 0 },
+    seq: {},
     lastCalls: {},
   };
 }
@@ -128,23 +145,72 @@ export function rolloverIfNewDay(state: QueueState, now: number): QueueState {
   return { ...createState(now, state.settings), version: state.version + 1 };
 }
 
-// ---------------------------------------------------------------------------
-// Tokens, target times and ordering
-// ---------------------------------------------------------------------------
-
-export function makeToken(prefix: "W" | "A", n: number): string {
-  return `${prefix}-${String(n).padStart(3, "0")}`;
+/** True when stored state is in the current shape (per-service queues). Older saved days start fresh. */
+export function isCurrentShape(state: QueueState): boolean {
+  const s = state.settings as Partial<Settings> | undefined;
+  return (
+    typeof s?.protectionMinutes === "number" &&
+    Array.isArray(s.services) &&
+    s.services.every((x) => typeof x.letter === "string" && typeof x.rooms === "number")
+  );
 }
 
-export function tokenNumber(token: string): number {
-  return Number.parseInt(token.slice(2), 10);
+export function upgradeState(state: QueueState, now: number): QueueState {
+  return isCurrentShape(state) ? state : { ...createState(now), version: (state.version ?? 0) + 1 };
 }
+
+// ---------------------------------------------------------------------------
+// Services, rooms and tokens
+// ---------------------------------------------------------------------------
 
 export function getService(settings: Settings, id: string): Service {
   const service = settings.services.find((s) => s.id === id);
   if (!service) throw new QueueError(`Unknown service "${id}".`);
   return service;
 }
+
+export interface Room {
+  id: string;
+  serviceId: string;
+  n: number;
+}
+
+export const roomId = (serviceId: string, n: number) => `${serviceId}:${n}`;
+
+export function parseRoom(settings: Settings, id: string): Room {
+  const [serviceId, num] = String(id).split(":");
+  const n = Number(num);
+  const service = settings.services.find((s) => s.id === serviceId);
+  if (!service || !Number.isInteger(n) || n < 1 || n > service.rooms) {
+    throw new QueueError(`Room "${id}" does not exist.`);
+  }
+  return { id, serviceId, n };
+}
+
+export function allRooms(settings: Settings): Room[] {
+  return settings.services.flatMap((s) => Array.from({ length: s.rooms }, (_, i) => ({ id: roomId(s.id, i + 1), serviceId: s.id, n: i + 1 })));
+}
+
+export function roomLabel(settings: Settings, id: string): string {
+  const { serviceId, n } = parseRoom(settings, id);
+  return `${getService(settings, serviceId).name} · Room ${n}`;
+}
+
+export function tokenPrefix(service: Service, type: CustomerType): string {
+  return `${service.letter}${type === "walk_in" ? "W" : "A"}`;
+}
+
+export function makeToken(prefix: string, n: number): string {
+  return `${prefix}-${String(n).padStart(3, "0")}`;
+}
+
+export function tokenNumber(token: string): number {
+  return Number.parseInt(token.slice(token.indexOf("-") + 1), 10);
+}
+
+// ---------------------------------------------------------------------------
+// Target times and the call order
+// ---------------------------------------------------------------------------
 
 /** Walk-ins and late-converted appointments: arrival time. On-time/early appointments: scheduled time. */
 export function targetTime(c: Customer): number {
@@ -154,7 +220,7 @@ export function targetTime(c: Customer): number {
   return c.arrivedAt ?? c.createdAt;
 }
 
-/** True when the customer ranks as an appointment in ties (late conversions rank as walk-ins). */
+/** True when the customer ranks as an appointment (late conversions rank as walk-ins). */
 export function ranksAsAppointment(c: Customer): boolean {
   return c.type === "appointment" && !c.lateConverted;
 }
@@ -180,29 +246,46 @@ export function isOverdue(c: Customer, now: number, settings: Settings): boolean
   );
 }
 
-// ---------------------------------------------------------------------------
-// Call-next decision
-// ---------------------------------------------------------------------------
-
-/**
- * Call-next rule at time `at`: earliest due target (target ≤ at); if nobody is due,
- * the earliest upcoming target so the counter isn't left idle. Returns null when nobody waits.
- */
-export function chooseNext(waiting: Customer[], at: number): { customer: Customer; due: boolean } | null {
-  let best: Customer | null = null;
-  let bestDue = false;
-  for (const c of waiting) {
-    const due = targetTime(c) <= at;
-    // Any due customer beats any upcoming one; otherwise compare by target order.
-    if (!best || (due && !bestDue) || (due === bestDue && compareByTarget(c, best) < 0)) {
-      best = c;
-      bestDue = due;
-    }
-  }
-  return best ? { customer: best, due: bestDue } : null;
+/** A walk-in (or late arrival) who has waited at least the protection time keeps its place. */
+export function isProtected(c: Customer, at: number, settings: Settings): boolean {
+  return (
+    !ranksAsAppointment(c) &&
+    settings.protectionMinutes > 0 &&
+    at - (c.arrivedAt ?? c.createdAt) >= settings.protectionMinutes * MINUTE
+  );
 }
 
-function describeTarget(c: Customer, tz: string): string {
+/**
+ * Where a waiting patient stands at time `at`:
+ * 0 priority · 1 due appointment or protected walk-in · 2 other due walk-in · 3 not due yet.
+ */
+export function tierAt(c: Customer, at: number, settings: Settings): 0 | 1 | 2 | 3 {
+  if (c.priority) return 0;
+  if (targetTime(c) > at) return 3;
+  if (ranksAsAppointment(c) || isProtected(c, at, settings)) return 1;
+  return 2;
+}
+
+function compareAt(a: Customer, b: Customer, at: number, settings: Settings): number {
+  const ta = tierAt(a, at, settings);
+  const tb = tierAt(b, at, settings);
+  if (ta !== tb) return ta - tb;
+  if (ta === 0) return a.priority!.at - b.priority!.at || compareByTarget(a, b);
+  return compareByTarget(a, b);
+}
+
+/** Call-next rule at time `at` for one service queue. Null when nobody waits. */
+export function chooseNext(
+  waiting: Customer[],
+  at: number,
+  settings: Settings,
+): { customer: Customer; tier: 0 | 1 | 2 | 3 } | null {
+  let best: Customer | null = null;
+  for (const c of waiting) if (!best || compareAt(c, best, at, settings) < 0) best = c;
+  return best ? { customer: best, tier: tierAt(best, at, settings) } : null;
+}
+
+function describe(c: Customer, tz: string): string {
   const clock = formatClock(targetTime(c), tz);
   if (ranksAsAppointment(c)) return `appointment at ${clock}`;
   if (c.lateConverted) return `late appointment, re-queued as a walk-in at ${clock}`;
@@ -213,26 +296,34 @@ function describeTarget(c: Customer, tz: string): string {
 export function pickNext(
   waiting: Customer[],
   at: number,
-  tz: string,
-): { customer: Customer; due: boolean; reason: string } | null {
-  const pick = chooseNext(waiting, at);
+  settings: Settings,
+): { customer: Customer; tier: number; reason: string } | null {
+  const pick = chooseNext(waiting, at, settings);
   if (!pick) return null;
-  const { customer, due } = pick;
-
-  let reason = due
-    ? `${customer.token} called: ${describeTarget(customer, tz)}, the earliest due target`
-    : `${customer.token} called early: nobody is due yet, ${describeTarget(customer, tz)} is the earliest upcoming target`;
-
+  const { customer: c, tier } = pick;
+  const tz = settings.timezone;
+  let reason: string;
+  if (tier === 0) {
+    reason = `${c.token} called first: priority (${c.priority!.reason}), flagged at ${formatClock(c.priority!.at, tz)}`;
+  } else if (tier === 1 && ranksAsAppointment(c)) {
+    reason = `${c.token} called: ${describe(c, tz)} is due, and appointments go ahead of walk-ins at their time`;
+  } else if (tier === 1) {
+    reason = `${c.token} called: ${describe(c, tz)}, waited over ${settings.protectionMinutes} min so keeps its place`;
+  } else if (tier === 2) {
+    reason = `${c.token} called: ${describe(c, tz)}, the earliest due`;
+  } else {
+    reason = `${c.token} called early: nobody is due yet, ${describe(c, tz)} is the earliest upcoming`;
+  }
   const tied = waiting.find(
-    (c) => c !== customer && targetTime(c) === targetTime(customer) && (targetTime(c) <= at) === due,
+    (o) => o !== c && tierAt(o, at, settings) === tier && tier !== 0 && targetTime(o) === targetTime(c),
   );
   if (tied) {
     reason +=
-      ranksAsAppointment(customer) !== ranksAsAppointment(tied)
+      ranksAsAppointment(c) !== ranksAsAppointment(tied)
         ? `; tied with ${tied.token}, appointment goes first`
         : `; tied with ${tied.token}, lower token number goes first`;
   }
-  return { customer, due, reason: `${reason}.` };
+  return { customer: c, tier, reason: `${reason}.` };
 }
 
 // ---------------------------------------------------------------------------
@@ -266,43 +357,38 @@ export function expectedDuration(
 
 export interface Projection {
   id: string;
+  /** Place within the patient's service queue (1 = next). */
   position: number;
-  counter: number;
+  room: string;
   startAt: number;
   waitMs: number;
 }
 
 /**
- * Forward simulation: each counter is free at now + remaining time of its current customer
- * (at least 1 min). Whenever a counter frees up, apply the exact call-next rule at that moment.
+ * Forward simulation, one service queue at a time: each room is free at now + remaining time of
+ * its current patient (at least 1 min). Whenever a room frees up, apply the call-next rule then.
  */
 export function simulate(state: QueueState, now: number): Projection[] {
   const { settings, customers } = state;
-  const expected = (serviceId: string) => expectedDuration(customers, settings, serviceId).ms;
-
-  const counters = Array.from({ length: settings.counters }, (_, i) => {
-    const n = i + 1;
-    const current = customers.find((c) => c.status === "serving" && c.counter === n);
-    if (!current || current.calledAt === undefined) return { n, freeAt: now };
-    const remaining = expected(current.service) - (now - current.calledAt);
-    return { n, freeAt: now + Math.max(remaining, MINUTE) };
-  });
-
-  let remaining = customers.filter((c) => c.status === "waiting");
   const projection: Projection[] = [];
-  while (remaining.length > 0) {
-    counters.sort((a, b) => a.freeAt - b.freeAt || a.n - b.n);
-    const slot = counters[0];
-    const { customer } = chooseNext(remaining, slot.freeAt)!;
-    projection.push({
-      id: customer.id,
-      position: projection.length + 1,
-      counter: slot.n,
-      startAt: slot.freeAt,
-      waitMs: slot.freeAt - now,
+  for (const service of settings.services) {
+    const expected = expectedDuration(customers, settings, service.id).ms;
+    const rooms = Array.from({ length: service.rooms }, (_, i) => {
+      const id = roomId(service.id, i + 1);
+      const current = customers.find((c) => c.status === "serving" && c.room === id);
+      if (!current || current.calledAt === undefined) return { id, n: i + 1, freeAt: now };
+      return { id, n: i + 1, freeAt: now + Math.max(expected - (now - current.calledAt), MINUTE) };
     });
-    slot.freeAt += expected(customer.service);
-    remaining = remaining.filter((c) => c !== customer);
+    let remaining = customers.filter((c) => c.status === "waiting" && c.service === service.id);
+    let position = 0;
+    while (remaining.length > 0) {
+      rooms.sort((a, b) => a.freeAt - b.freeAt || a.n - b.n);
+      const slot = rooms[0];
+      const { customer } = chooseNext(remaining, slot.freeAt, settings)!;
+      projection.push({ id: customer.id, position: ++position, room: slot.id, startAt: slot.freeAt, waitMs: slot.freeAt - now });
+      slot.freeAt += expected;
+      remaining = remaining.filter((c) => c !== customer);
+    }
   }
   return projection;
 }
@@ -314,7 +400,7 @@ export function formatWait(waitMs: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Booking capacity (no double-booking)
+// Booking capacity (no double-booking within a service)
 // ---------------------------------------------------------------------------
 
 function isActiveAppointment(c: Customer): boolean {
@@ -330,7 +416,7 @@ function windowOf(settings: Settings, serviceId: string, start: number) {
   return { start, end: start + getService(settings, serviceId).defaultMinutes * MINUTE };
 }
 
-/** Active appointments whose window overlaps the proposed one. */
+/** Active appointments of the same service whose window overlaps the proposed one. */
 export function findClashes(
   state: QueueState,
   serviceId: string,
@@ -339,13 +425,13 @@ export function findClashes(
 ): Customer[] {
   const w = windowOf(state.settings, serviceId, scheduledAt);
   return state.customers.filter((c) => {
-    if (c.id === excludeId || !isActiveAppointment(c)) return false;
+    if (c.id === excludeId || c.service !== serviceId || !isActiveAppointment(c)) return false;
     const o = windowOf(state.settings, c.service, c.scheduledAt!);
     return o.start < w.end && w.start < o.end;
   });
 }
 
-/** Returns an error message when the booking would exceed counter capacity, else null. */
+/** Returns an error message when the booking would exceed that service's rooms, else null. */
 export function checkCapacity(
   state: QueueState,
   serviceId: string,
@@ -353,7 +439,7 @@ export function checkCapacity(
   excludeId?: string,
 ): string | null {
   const clashes = findClashes(state, serviceId, scheduledAt, excludeId);
-  if (clashes.length + 1 <= state.settings.counters) return null;
+  if (clashes.length + 1 <= getService(state.settings, serviceId).rooms) return null;
   const tz = state.settings.timezone;
   const w = windowOf(state.settings, serviceId, scheduledAt);
   const list = clashes
@@ -363,14 +449,14 @@ export function checkCapacity(
   return `${formatClock(w.start, tz)}–${formatClock(w.end, tz)} clashes with ${list}.`;
 }
 
-/** Existing bookings that exceed capacity (e.g. after counters were reduced). Never auto-cancelled. */
+/** Existing bookings that exceed their service's rooms (e.g. after rooms were reduced). */
 export function capacityWarnings(state: QueueState): string[] {
   const tz = state.settings.timezone;
   const warnings: string[] = [];
   const active = state.customers.filter(isActiveAppointment).sort(compareByTarget);
   for (const c of active) {
     const clashes = findClashes(state, c.service, c.scheduledAt!, c.id);
-    if (clashes.length + 1 > state.settings.counters) {
+    if (clashes.length + 1 > getService(state.settings, c.service).rooms) {
       const others = clashes.map((o) => o.token).join(", ");
       warnings.push(`${c.token} at ${formatClock(c.scheduledAt!, tz)} overlaps ${others}.`);
     }
@@ -404,18 +490,12 @@ function validSchedule(state: QueueState, scheduledAt: number, now: number): voi
 
 function findCustomer(state: QueueState, id: string): Customer {
   const c = state.customers.find((x) => x.id === id);
-  if (!c) throw new QueueError("Customer not found.");
+  if (!c) throw new QueueError("Patient not found.");
   return c;
 }
 
-function servingAt(state: QueueState, counter: number): Customer | undefined {
-  return state.customers.find((c) => c.status === "serving" && c.counter === counter);
-}
-
-function validCounter(state: QueueState, counter: number): void {
-  if (!Number.isInteger(counter) || counter < 1 || counter > state.settings.counters) {
-    throw new QueueError(`Counter ${counter} does not exist.`);
-  }
+function servingAt(state: QueueState, room: string): Customer | undefined {
+  return state.customers.find((c) => c.status === "serving" && c.room === room);
 }
 
 function withCustomer(state: QueueState, updated: Customer): QueueState {
@@ -426,28 +506,39 @@ function bump(state: QueueState): QueueState {
   return { ...state, version: state.version + 1 };
 }
 
-export function callNext(state: QueueState, counter: number, now: number): ActionResult {
-  validCounter(state, counter);
-  const busy = servingAt(state, counter);
-  if (busy) throw new QueueError(`Counter ${counter} is still serving ${busy.token}. Close it out first.`);
+function issue(state: QueueState, service: Service, type: CustomerType): { token: string; seq: QueueState["seq"] } {
+  const prefix = tokenPrefix(service, type);
+  const n = (state.seq[prefix] ?? 0) + 1;
+  return { token: makeToken(prefix, n), seq: { ...state.seq, [prefix]: n } };
+}
 
-  const waiting = state.customers.filter((c) => c.status === "waiting");
-  const pick = pickNext(waiting, now, state.settings.timezone);
-  if (!pick) return { state, message: `Nobody is checked in. Counter ${counter} stays idle.` };
-
-  const called: CallRecord = {
-    counter,
-    customerId: pick.customer.id,
-    token: pick.customer.token,
-    reason: pick.reason,
-    at: now,
-  };
-  const next = withCustomer(state, { ...pick.customer, status: "serving", calledAt: now, counter });
+function startServing(state: QueueState, room: string, customer: Customer, reason: string, now: number): ActionResult {
+  const called: CallRecord = { room, customerId: customer.id, token: customer.token, reason, at: now };
+  const next = withCustomer(state, { ...customer, status: "serving", calledAt: now, room, priority: undefined });
   return {
-    state: bump({ ...next, lastCalls: { ...next.lastCalls, [String(counter)]: called } }),
-    message: pick.reason,
+    state: bump({ ...next, lastCalls: { ...next.lastCalls, [room]: called } }),
+    message: reason,
     called,
   };
+}
+
+function freeRoom(state: QueueState, roomRef: string): Room {
+  const room = parseRoom(state.settings, roomRef);
+  const busy = servingAt(state, room.id);
+  if (busy) {
+    throw new QueueError(`${roomLabel(state.settings, room.id)} is still serving ${busy.token}. Close it out first.`);
+  }
+  return room;
+}
+
+export function callNext(state: QueueState, roomRef: string, now: number): ActionResult {
+  const room = freeRoom(state, roomRef);
+  const waiting = state.customers.filter((c) => c.status === "waiting" && c.service === room.serviceId);
+  const pick = pickNext(waiting, now, state.settings);
+  if (!pick) {
+    return { state, message: `Nobody is waiting for ${getService(state.settings, room.serviceId).name}. ${roomLabel(state.settings, room.id)} stays free.` };
+  }
+  return startServing(state, room.id, pick.customer, pick.reason, now);
 }
 
 export function applyAction(state: QueueState, action: Action, now: number): ActionResult {
@@ -457,15 +548,14 @@ export function applyAction(state: QueueState, action: Action, now: number): Act
   switch (action.type) {
     case "addWalkIn": {
       const name = validName(action.name);
-      getService(settings, action.service);
-      const n = state.seq.W + 1;
-      const token = makeToken("W", n);
+      const service = getService(settings, action.service);
+      const { token, seq } = issue(state, service, "walk_in");
       const customer: Customer = {
         id: token,
         token,
         name,
         type: "walk_in",
-        service: action.service,
+        service: service.id,
         createdAt: now,
         arrivedAt: now,
         checkedIn: true,
@@ -473,25 +563,24 @@ export function applyAction(state: QueueState, action: Action, now: number): Act
         lateConverted: false,
       };
       return {
-        state: bump({ ...state, seq: { ...state.seq, W: n }, customers: [...state.customers, customer] }),
-        message: `${token} added for ${name}.`,
+        state: bump({ ...state, seq, customers: [...state.customers, customer] }),
+        message: `${token} added for ${name} (${service.name}).`,
       };
     }
 
     case "book": {
       const name = validName(action.name);
-      getService(settings, action.service);
+      const service = getService(settings, action.service);
       validSchedule(state, action.scheduledAt, now);
-      const clash = checkCapacity(state, action.service, action.scheduledAt);
+      const clash = checkCapacity(state, service.id, action.scheduledAt);
       if (clash) throw new QueueError(clash);
-      const n = state.seq.A + 1;
-      const token = makeToken("A", n);
+      const { token, seq } = issue(state, service, "appointment");
       const customer: Customer = {
         id: token,
         token,
         name,
         type: "appointment",
-        service: action.service,
+        service: service.id,
         createdAt: now,
         scheduledAt: action.scheduledAt,
         checkedIn: false,
@@ -499,8 +588,8 @@ export function applyAction(state: QueueState, action: Action, now: number): Act
         lateConverted: false,
       };
       return {
-        state: bump({ ...state, seq: { ...state.seq, A: n }, customers: [...state.customers, customer] }),
-        message: `${token} booked for ${name} at ${formatClock(action.scheduledAt, tz)}.`,
+        state: bump({ ...state, seq, customers: [...state.customers, customer] }),
+        message: `${token} booked for ${name} at ${formatClock(action.scheduledAt, tz)} (${service.name}).`,
       };
     }
 
@@ -524,12 +613,11 @@ export function applyAction(state: QueueState, action: Action, now: number): Act
       if (c.status !== "booked" && c.status !== "waiting") {
         throw new QueueError(`${c.token} can no longer be edited.`);
       }
+      if (action.service !== undefined && action.service !== c.service) {
+        throw new QueueError("Each service has its own queue and token. To change service, cancel and add them again.");
+      }
       const updated: Customer = { ...c };
       if (action.name !== undefined) updated.name = validName(action.name);
-      if (action.service !== undefined) {
-        getService(settings, action.service);
-        updated.service = action.service;
-      }
       if (action.scheduledAt !== undefined && action.scheduledAt !== c.scheduledAt) {
         if (c.type !== "appointment") throw new QueueError("Walk-ins have no scheduled time.");
         if (c.status === "booked") {
@@ -542,7 +630,7 @@ export function applyAction(state: QueueState, action: Action, now: number): Act
         }
         updated.scheduledAt = action.scheduledAt;
       }
-      const windowChanged = updated.scheduledAt !== c.scheduledAt || updated.service !== c.service;
+      const windowChanged = updated.scheduledAt !== c.scheduledAt;
       if (isActiveAppointment(updated) && (windowChanged || c.lateConverted !== updated.lateConverted)) {
         const clash = checkCapacity(state, updated.service, updated.scheduledAt!, c.id);
         if (clash) throw new QueueError(clash);
@@ -551,15 +639,25 @@ export function applyAction(state: QueueState, action: Action, now: number): Act
     }
 
     case "callNext":
-      return callNext(state, action.counter, now);
+      return callNext(state, action.room, now);
+
+    case "callPatient": {
+      const room = freeRoom(state, action.room);
+      const c = findCustomer(state, action.id);
+      if (c.status !== "waiting") throw new QueueError(`${c.token} is not waiting.`);
+      if (c.service !== room.serviceId) {
+        throw new QueueError(`${c.token} is in the ${getService(settings, c.service).name} queue, not ${getService(settings, room.serviceId).name}.`);
+      }
+      return startServing(state, room.id, c, `${c.token} called by staff (Call now).`, now);
+    }
 
     case "serve": {
-      validCounter(state, action.counter);
-      const current = servingAt(state, action.counter);
-      if (!current) throw new QueueError(`Counter ${action.counter} is not serving anyone.`);
+      const room = parseRoom(settings, action.room);
+      const current = servingAt(state, room.id);
+      if (!current) throw new QueueError(`${roomLabel(settings, room.id)} is not serving anyone.`);
       const served = bump(withCustomer(state, { ...current, status: "served", servedAt: now }));
       if (!action.callNext) return { state: served, message: `${current.token} served.` };
-      return callNext(served, action.counter, now);
+      return callNext(served, room.id, now);
     }
 
     case "noShow": {
@@ -575,24 +673,36 @@ export function applyAction(state: QueueState, action: Action, now: number): Act
       if (c.status !== "waiting" && c.status !== "booked") {
         throw new QueueError(`${c.token} cannot be cancelled.`);
       }
-      return { state: bump(withCustomer(state, { ...c, status: "cancelled" })), message: `${c.token} cancelled.` };
+      return { state: bump(withCustomer(state, { ...c, status: "cancelled", priority: undefined })), message: `${c.token} cancelled.` };
+    }
+
+    case "setPriority": {
+      const c = findCustomer(state, action.id);
+      if (c.status !== "waiting") throw new QueueError("Only patients who are waiting can be given priority.");
+      if (action.reason === null) {
+        return { state: bump(withCustomer(state, { ...c, priority: undefined })), message: `${c.token} is no longer priority.` };
+      }
+      if (!PRIORITY_REASONS.includes(action.reason)) throw new QueueError("Choose a priority reason.");
+      const priority = { reason: action.reason, at: c.priority?.at ?? now };
+      return {
+        state: bump(withCustomer(state, { ...c, priority })),
+        message: `${c.token} marked priority (${action.reason}); they're next in ${getService(settings, c.service).name}.`,
+      };
     }
 
     case "updateSettings": {
       const next: Settings = { ...settings, services: settings.services.map((s) => ({ ...s })) };
-      if (action.counters !== undefined) {
-        if (!Number.isInteger(action.counters) || action.counters < 1 || action.counters > MAX_COUNTERS) {
-          throw new QueueError(`Counters must be between 1 and ${MAX_COUNTERS}.`);
-        }
-        const busy = state.customers.find((c) => c.status === "serving" && c.counter! > action.counters!);
-        if (busy) throw new QueueError(`Counter ${busy.counter} is serving ${busy.token}. Close it out first.`);
-        next.counters = action.counters;
-      }
       if (action.graceMinutes !== undefined) {
         if (!Number.isInteger(action.graceMinutes) || action.graceMinutes < 0 || action.graceMinutes > 60) {
           throw new QueueError("Grace period must be between 0 and 60 minutes.");
         }
         next.graceMinutes = action.graceMinutes;
+      }
+      if (action.protectionMinutes !== undefined) {
+        if (!Number.isInteger(action.protectionMinutes) || action.protectionMinutes < 0 || action.protectionMinutes > 240) {
+          throw new QueueError("Walk-in protection must be between 0 and 240 minutes.");
+        }
+        next.protectionMinutes = action.protectionMinutes;
       }
       for (const [id, minutes] of Object.entries(action.durations ?? {})) {
         if (!Number.isInteger(minutes) || minutes < 1 || minutes > 240) {
@@ -601,6 +711,18 @@ export function applyAction(state: QueueState, action: Action, now: number): Act
         const service = next.services.find((s) => s.id === id);
         if (!service) throw new QueueError(`Unknown service "${id}".`);
         service.defaultMinutes = minutes;
+      }
+      for (const [id, rooms] of Object.entries(action.rooms ?? {})) {
+        const service = next.services.find((s) => s.id === id);
+        if (!service) throw new QueueError(`Unknown service "${id}".`);
+        if (!Number.isInteger(rooms) || rooms < 1 || rooms > MAX_ROOMS) {
+          throw new QueueError(`Rooms must be between 1 and ${MAX_ROOMS}.`);
+        }
+        const busy = state.customers.find(
+          (c) => c.status === "serving" && c.service === id && Number(c.room?.split(":")[1]) > rooms,
+        );
+        if (busy) throw new QueueError(`${roomLabel(settings, busy.room!)} is serving ${busy.token}. Close it out first.`);
+        service.rooms = rooms;
       }
       return { state: bump({ ...state, settings: next }), message: "Settings saved." };
     }
@@ -618,12 +740,12 @@ export function applyAction(state: QueueState, action: Action, now: number): Act
 // ---------------------------------------------------------------------------
 
 export interface WaitingRow extends Customer {
+  /** Place within the service queue. */
   position: number;
   targetAt: number;
   waitMs: number;
   waitLabel: string;
-  /** Projected counter and start time from the simulation, plus the expected service length. */
-  projectedCounter: number;
+  projectedRoom: string;
   startAt: number;
   expectedMs: number;
 }
@@ -632,12 +754,17 @@ export interface BookedRow extends Customer {
   overdue: boolean;
 }
 
-export interface CounterView {
-  counter: number;
+export interface RoomView {
+  id: string;
+  serviceId: string;
+  n: number;
+  label: string;
   current: Customer | null;
-  /** When the current customer is expected to finish (at least 1 min from now). */
+  /** When the current patient is expected to finish (at least 1 min from now). */
   expectedEndAt: number | null;
   lastCall: CallRecord | null;
+  /** Patients waiting in this room's service queue. */
+  waitingCount: number;
 }
 
 export interface QueueView {
@@ -645,7 +772,7 @@ export interface QueueView {
   day: string;
   version: number;
   settings: Settings;
-  counters: CounterView[];
+  rooms: RoomView[];
   waiting: WaitingRow[];
   booked: BookedRow[];
   done: Customer[];
@@ -654,8 +781,11 @@ export interface QueueView {
 }
 
 export function buildView(state: QueueState, now: number): QueueView {
+  const { settings } = state;
   const projection = new Map(simulate(state, now).map((p) => [p.id, p]));
-  const expectedMs = (serviceId: string) => expectedDuration(state.customers, state.settings, serviceId).ms;
+  const expectedMs = (serviceId: string) => expectedDuration(state.customers, settings, serviceId).ms;
+  const order = new Map(settings.services.map((s, i) => [s.id, i]));
+
   const waiting = state.customers
     .filter((c) => c.status === "waiting")
     .map((c) => {
@@ -666,16 +796,16 @@ export function buildView(state: QueueState, now: number): QueueView {
         targetAt: targetTime(c),
         waitMs: p.waitMs,
         waitLabel: formatWait(p.waitMs),
-        projectedCounter: p.counter,
+        projectedRoom: p.room,
         startAt: p.startAt,
         expectedMs: expectedMs(c.service),
       };
     })
-    .sort((a, b) => a.position - b.position);
+    .sort((a, b) => order.get(a.service)! - order.get(b.service)! || a.position - b.position);
 
   const expected: QueueView["expected"] = {};
-  for (const s of state.settings.services) {
-    const e = expectedDuration(state.customers, state.settings, s.id);
+  for (const s of settings.services) {
+    const e = expectedDuration(state.customers, settings, s.id);
     expected[s.id] = { minutes: Math.round((e.ms / MINUTE) * 10) / 10, samples: e.samples };
   }
 
@@ -683,22 +813,22 @@ export function buildView(state: QueueState, now: number): QueueView {
     now,
     day: state.day,
     version: state.version,
-    settings: state.settings,
-    counters: Array.from({ length: state.settings.counters }, (_, i) => {
-      const current = servingAt(state, i + 1) ?? null;
+    settings,
+    rooms: allRooms(settings).map((r) => {
+      const current = servingAt(state, r.id) ?? null;
       return {
-        counter: i + 1,
+        ...r,
+        label: roomLabel(settings, r.id),
         current,
-        expectedEndAt: current
-          ? now + Math.max(expectedMs(current.service) - (now - current.calledAt!), MINUTE)
-          : null,
-        lastCall: state.lastCalls[String(i + 1)] ?? null,
+        expectedEndAt: current ? now + Math.max(expectedMs(current.service) - (now - current.calledAt!), MINUTE) : null,
+        lastCall: state.lastCalls[r.id] ?? null,
+        waitingCount: waiting.filter((w) => w.service === r.serviceId).length,
       };
     }),
     waiting,
     booked: state.customers
       .filter((c) => c.status === "booked")
-      .map((c) => ({ ...c, overdue: isOverdue(c, now, state.settings) }))
+      .map((c) => ({ ...c, overdue: isOverdue(c, now, settings) }))
       .sort((a, b) => a.scheduledAt! - b.scheduledAt!),
     done: state.customers
       .filter((c) => c.status === "served" || c.status === "no_show" || c.status === "cancelled")
@@ -722,27 +852,48 @@ export interface PublicRow {
   lateConverted: boolean;
 }
 
-export interface PublicView {
-  now: number;
-  counters: { counter: number; token: string | null; initial: string | null }[];
+export interface PublicService {
+  id: string;
+  name: string;
+  letter: string;
+  rooms: { id: string; label: string; n: number; token: string | null; initial: string | null }[];
   waiting: PublicRow[];
 }
 
-/** Strips everything but token, initial, position and wait. Booked appointments are never included. */
+export interface PublicView {
+  now: number;
+  services: PublicService[];
+}
+
+/**
+ * Strips everything but token, initial, place and wait, per service queue. Booked appointments
+ * and priority reasons are never included.
+ */
 export function toPublicView(view: QueueView): PublicView {
   return {
     now: view.now,
-    counters: view.counters.map((c) => ({
-      counter: c.counter,
-      token: c.current?.token ?? null,
-      initial: c.current ? publicName(c.current.name) : null,
-    })),
-    waiting: view.waiting.map((w) => ({
-      token: w.token,
-      initial: publicName(w.name),
-      position: w.position,
-      waitLabel: w.waitLabel,
-      lateConverted: w.lateConverted,
+    services: view.settings.services.map((s) => ({
+      id: s.id,
+      name: s.name,
+      letter: s.letter,
+      rooms: view.rooms
+        .filter((r) => r.serviceId === s.id)
+        .map((r) => ({
+          id: r.id,
+          label: `Room ${r.n}`,
+          n: r.n,
+          token: r.current?.token ?? null,
+          initial: r.current ? publicName(r.current.name) : null,
+        })),
+      waiting: view.waiting
+        .filter((w) => w.service === s.id)
+        .map((w) => ({
+          token: w.token,
+          initial: publicName(w.name),
+          position: w.position,
+          waitLabel: w.waitLabel,
+          lateConverted: w.lateConverted,
+        })),
     })),
   };
 }

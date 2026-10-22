@@ -19,7 +19,8 @@ public display.
 >
 > The queue also clears itself at midnight (Dhaka time), so if the lists look empty, use one of these.
 
-- **Host:** Vercel (Next.js, functions in Mumbai `bom1`); data in **Postgres on Supabase** (Mumbai), with
+- **Host:** Vercel (Next.js, functions in Singapore `sin1`); data in **Postgres on Supabase** (Singapore,
+  `ap-southeast-1`; functions and database must share a region: each database round trip crosses it), with
   **Supabase Realtime** pushing every change to open screens.
 
 ## How to run

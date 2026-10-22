@@ -243,8 +243,12 @@ proposed and what was corrected. Model: Claude (Opus) in Claude Code. Dates: 21 
   14); both API routes send a `Server-Timing` header so the production cost can be read in dev tools.
 - **Tested by:** a new store test counts the statements sent and checks the diff-only write leaves the database
   exactly as a full rewrite would; 59/59 Vitest; 7/7 E2E on a production build against local Postgres.
-- **Not yet known:** the production gain. Claude can't reach the production database from here (its password is a
-  Vercel secret), so the Server-Timing numbers after the next deploy are the real measurement.
+- **Measured live after deploying:** a typical read went from ~0.59 s to ~0.15 s end to end. Server-Timing showed
+  the remaining database time was a steady ~66 ms per statement, far too slow for one data centre. Looking up the
+  database's IP in AWS's published ranges showed the production Supabase project is in **Singapore**
+  (ap-southeast-1), not Mumbai as assumed (only the first, unused project was in Mumbai), while the functions ran
+  in Mumbai. New connections cost ~0.65 s for the same reason. 60 simultaneous live reads: all finished, no hangs.
+- **Next fix:** functions moved to Singapore (`sin1`), next to the database.
 
 ## Things Claude did not do (by design)
 - It did not enter credentials. GitHub and Vercel sign-ins and the Upstash terms were completed by me.

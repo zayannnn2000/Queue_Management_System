@@ -11,7 +11,6 @@ import {
   ImageRun,
   LevelFormat,
   Packer,
-  PageBreak,
   Paragraph,
   ShadingType,
   Table,
@@ -149,7 +148,7 @@ const content = [
   p(
     "**Before you start:** sign in with PIN `12345`, then open **Settings**. **Load sample day** fills the five service queues with fictional patients to try everything at once; **Reset day** clears today's queue and restarts every token sequence (CW-001, CA-001, BW-001 …). The queue also clears itself at midnight (Dhaka time).",
   ),
-  p("**Stack:** Next.js 16 and TypeScript on Vercel; shared state in Upstash Redis. A simulation: all patients are fictional."),
+  p("**Stack:** Next.js 16 and TypeScript on Vercel; Postgres and Realtime on Supabase. A simulation: all patients are fictional."),
 
   h1("1. Key design decisions"),
   bullet("**One front desk, one queue per service.** Consultation, follow-up, blood test, vaccination and prescription renewal each have their own queue and room(s), so a 5-minute blood test never waits behind 15-minute consultations. Services can be added or removed in Settings."),
@@ -157,10 +156,9 @@ const content = [
   bullet("**Appointments come first at their time,** a walk-in arriving just before a booking is held 15 minutes, staff can flag **Priority** (Elderly, Pregnant, Disability, Urgent, Other) or **Call now**, and a walk-in who has waited 30 minutes keeps their place."),
   bullet("**Appointments join the queue only at check-in.** A booking that hasn't arrived can never hold up patients who are present."),
   bullet("**All queue logic is one pure, tested module** (`lib/queue.ts`): no I/O, and the clock is always passed in. Every staff action goes through a single reducer that the server runs, so the unit tests cover exactly the code the live app uses."),
-  bullet('**The server decides who is next** and writes with a compare-and-set on a version number, so two staff pressing "Call next" at the same moment can never call the same patient.'),
-  bullet("**The wait estimate replays the call-next rule** instead of using a separate formula, so the estimate and the real order can't disagree."),
+  bullet('**The server decides who is next** and saves it in one Postgres transaction that checks a version number, so two staff pressing "Call next" at the same moment can never call the same patient. Postgres also enforces one token per day and one patient per room.'),  bullet("**The wait estimate replays the call-next rule** instead of using a separate formula, so the estimate and the real order can't disagree."),
   bullet('**Every call is explained** on screen, e.g. "CA-003 called: appointment at 10:30 is due, and appointments go ahead of walk-ins at their time".'),
-  bullet("**Privacy by design.** The public display and the printed token slip show only the token (and the first initial on the display); full names never leave the staff view. Only a name and a service are collected."),
+  bullet("**Privacy by design.** The public display and the printed token slip show only the token (and the first initial on the display); full names never leave the staff view. Only a name and a service are collected. In the database, row-level security covers every table and the browser's key can read only the clinic's version row."),
   bullet("**Staff access with one shared PIN:** a signed 12-hour session cookie, a lock-out after 5 wrong tries, and checks in both the proxy and every staff API route. The waiting-room display stays public."),
 
   h1("2. Assumptions"),
@@ -199,7 +197,7 @@ const content = [
     "**1. How long a visit takes.** For each service, the average of its last 5 real visits. Until there are real visits, the default length is used. No-shows don't count, and one very long or very short visit is capped so it can't distort the average.",
     "**2. Play each service queue forward.** The system works out when the service's room will next be free: now if nobody is with the doctor, otherwise when the current patient should finish (at least 1 minute away). At that moment it \"calls\" the next patient using the same rule as the Call next button, notes their start time, adds their visit length, and repeats down that queue.",
     "**3. The wait.** Wait = predicted start time − now. With one room (the default) this is simply: **time left for the current patient + the visit lengths of everyone ahead in that queue.** With more rooms, each patient goes to whichever room frees up first.",
-    '**4. How it\'s shown.** "Due now" for 2 minutes or less; otherwise "~X min", rounded up to the next 5. Updated after every action and every 3 seconds.',
+    '**4. How it\'s shown.** "Due now" for 2 minutes or less; otherwise "~X min", rounded up to the next 5. Updated the moment anything changes, and on a timer so waits count down.',
   ]),
   p("", { spacing: { after: 40 } }),
   p("**Worked example** (also a unit test): the Consultation queue, 1 room, 15-min visits, now 10:00; the patient being seen is expected to finish at 10:06. CA-001 is booked for 10:05 and checked in at 09:55; CW-002 walked in at 09:50 and CW-003 at 09:58."),
@@ -216,24 +214,24 @@ const content = [
 
   h1("5. Trade-offs and limitations"),
   bullet("Appointments are honoured at their time, so a walk-in arriving just before one may wait about one extra visit; walk-in protection stops repeated pushing back. Late appointments lose their slot. Priority is a staff judgement, shown on the staff screen only."),
-  bullet("Idle-fill keeps rooms busy but can leave one occupied as a slot comes due; the estimate includes this. Waits are estimates that improve as real visit lengths accumulate. Screens poll every 3 seconds: simple on serverless, up to 3 s of lag."),
-  bullet("**Limitations:** one shared PIN rather than individual staff accounts (no record of who pressed a button); one clinic per deployment; a service can't be renamed once added; without Redis (local development) the queue lives in one server process's memory."),
+  bullet("Idle-fill keeps rooms busy but can leave one occupied as a slot comes due; the estimate includes this. Waits are estimates that improve as real visit lengths accumulate. Realtime sends only a \"changed\" nudge, never patient data."),
+  bullet("**Limitations:** one shared PIN rather than individual staff accounts (no record of who pressed a button); one clinic per deployment; a service can't be renamed once added; history is stored but not yet reported on."),
 
-  new Paragraph({ children: [new PageBreak()] }),
-  h1("Appendix A. Skills used to build the system"),
+  // The break belongs to the heading, so a full page 2 never leaves an empty page behind it.
+  new Paragraph({ heading: HeadingLevel.HEADING_1, pageBreakBefore: true, children: [new TextRun("Appendix A. Skills used to build the system")] }),
   p("These Claude Code skills were fed into the build. Each one was used at a specific stage, for a specific reason:"),
   table(
     [2000, 4100, 3766],
     ["Skill", "What it was used for", "Why"],
     [
       ["grill-me", "Interviewed me in rounds before any code to lock the queue rules: grace period, early and late appointments, ties, no-shows, counters, double-booking, editing.", "The brief leaves prioritisation open on purpose. Agreeing the rules first avoided rework and produced CLAUDE.md, the source of truth for the tests."],
-      ["vercel-react-best-practices", "Data loading and refresh: live data streamed inside Suspense, one server read per request, 3-second polling that pauses in hidden tabs, no state set inside effects.", "Keeps the front desk fast and correct while it refreshes every 3 seconds all day."],
+      ["vercel-react-best-practices", "Data loading and refresh: live data streamed inside Suspense, one server read per request, the Realtime client loaded only after the page is interactive, polling that pauses in hidden tabs.", "Keeps the front desk fast and correct while it updates all day."],
       ["vercel-composition-patterns", "Component design: one QueueProvider (state, actions, meta) and explicit variants (ServingCounter / IdleCounter, WalkInForm / AppointmentForm) instead of boolean props.", 'Small pieces that are easy to change: hiding "Served & call next" for the last patient was a one-place change.'],
       ["design-taste-frontend", "Art direction for both screens: the framed-sheet layout, the Hygieia restyle (lavender and lilac, Cormorant and Manrope, pill controls), the Next-hour strip and the opening reveal. Its inspector checked every screen at 1440, 768 and 390 px.", "A calm, distinctive interface instead of a generic dashboard, backed by measured checks."],
       ["web-design-guidelines", "Accessibility and UX audit of the staff and display screens.", "Found a missing skip link, ARIA roles without keyboard support, errors shown far from forms, and tokens a browser could auto-translate; all fixed."],
       ["playwright-cli", "End-to-end tests: the full staff flow, printing, double-booking refusal, display sync, PIN sign-in and lock-out.", "Proves the system works in a real browser, locally and on the live site; it caught a real race condition in production."],
       ["built-in-browser", "Manual click-through on localhost and on the live URL.", "Confirms what a person actually sees, e.g. the display following the staff screen."],
-      ["deploy-to-vercel", "Linking the project, setting the root directory, production deploys and the GitHub connection.", "The brief requires a public URL; Vercel with Upstash Redis gives shared state across every screen."],
+      ["deploy-to-vercel", "Linking the project, setting the root directory, production deploys and the GitHub connection.", "The brief requires a public URL; Vercel with Supabase Postgres (first Upstash Redis) gives shared state across every screen."],
       ["pdf", "The first version of this documentation.", "The format planned for the brief documentation at the time."],
       ["docx", "This Word version of the documentation.", "An editable document for the submission."],
     ],
@@ -245,7 +243,7 @@ const content = [
     [500, 4500, 4866],
     ["#", "Do this", "You should see"],
     [
-      ["1", 'Add a walk-in: name "Rina", General consultation, **Add walk-in**.', "Token CW-001, place 1, Due now. The display's General consultation panel shows CW-001 R. within 3 seconds."],
+      ["1", 'Add a walk-in: name "Rina", General consultation, **Add walk-in**.', "Token CW-001, place 1, Due now. The display's General consultation panel shows CW-001 R. within about a second (its header says Live)."],
       ["2", "Click **Print token**, then scan the slip's QR code with a phone.", "An 80 mm slip with CW-001, the service, Room 1, place, wait and a QR code, and no name. The QR opens the display with CW-001 highlighted."],
       ["3", 'Add a walk-in "Karim", **Blood test**.', "BW-001, place 1 in the Blood test queue: a separate queue with its own room."],
       ["4", 'Book "Sadia", General consultation, 30+ min ahead; then "Omar", Blood test, the **same time**.', "CA-001 and BA-001 are both booked. A second consultation at that time is refused (full for General consultation)."],
@@ -259,7 +257,7 @@ const content = [
     ],
   ),
   p("", { spacing: { after: 40 } }),
-  p("**Automated tests** (from the `queue-app` folder): `npm test` runs 52 unit tests of the queue rules, sign-in and seed data; `npm run test:e2e` runs 7 browser tests (staff flow, separate queues and priority, printing, booking per service, adding a service, display sync), plus PIN sign-in when E2E_STAFF_PIN is set."),
+  p("**Automated tests** (from the `queue-app` folder): `npm test` runs 58 tests of the queue rules, sign-in, seed data and the Postgres store (on PGlite, a real Postgres in-process); `npm run test:e2e` runs 7 browser tests (staff flow, separate queues and priority, printing, booking per service, adding a service, display sync), plus PIN sign-in when E2E_STAFF_PIN is set."),
 ];
 
 const doc = new Document({

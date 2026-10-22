@@ -205,6 +205,34 @@ proposed and what was corrected. Model: Claude (Opus) in Claude Code. Dates: 21 
   `walkInHold` sets target = arrival + 15 min and the reason names the appointment it waits for.
 - **Tested by:** 52/52 Vitest (6 for services, 6 for the hold), 7 E2E (adding and removing Dental end to end).
 
+## 19. Moving from Redis to Postgres on Supabase
+- **Prompt:** which database best suits the system, given real-time screens and this kind of data; then: go with the
+  recommended Postgres + Supabase.
+- **Recommendation (and why):** linked records and transactions (two rooms must never call the same patient),
+  constraints the database enforces, history for reports, push instead of polling, and patient data kept off the
+  browser. Convex was the runner-up; keeping Redis was judged fine for a demo only.
+- **Changes:**
+  - SQL migrations: `clinic`, `services` (archived, not deleted), `visits` (one row per patient per day),
+    `calls` (history), `login_attempts`; one token per day, one active service per letter, one patient per room
+    (a deferred constraint, so Served & call next can swap them in one write)
+  - row-level security on every table; the browser key may read only the clinic's version row
+  - `lib/pg-store.ts`: state ↔ rows, one version-checked transaction per write; `lib/store.ts` picks Postgres or memory
+    and seeds an empty database with the sample day; Redis removed
+  - Supabase Realtime on the clinic row: screens refetch through their own API on each change (no patient data over
+    the public channel), polling every 15 s as a safety net, 3 s without Realtime; the display shows "Live"
+  - every deploy applies migrations and fails if a table lacks row-level security
+- **My steps:** I added Supabase to the Vercel project. Claude can't create accounts or read secret values.
+- **Problems found along the way:**
+  - the first connection added a custom prefix to every setting name, and later attempts created three separate
+    databases; Claude spotted both by comparing names and project IDs (never values) before deploying
+  - a check of the live database found the migration log table open to the browser key; a migration locked it
+  - the app hung under load: parameterised reads outside a transaction got stuck in Supabase's transaction pooler.
+    Found by listing the database's active sessions; fixed by running every query inside a transaction, then
+    verified with 57 simultaneous requests (all finished, 12 parallel walk-ins saved, no duplicate tokens)
+- **Tested by:** 58/58 Vitest (6 for the Postgres store, run against PGlite, a real Postgres in-process);
+  7/7 E2E against a production build on Postgres; a walk-in reached the open display 0.8 s after it was saved;
+  REST calls with the public key confirmed it reads only the clinic row and can't change anything.
+
 ## Things Claude did not do (by design)
 - It did not enter credentials. GitHub and Vercel sign-ins and the Upstash terms were completed by me.
 - It did not invent customers, reviews or statistics. All names are fictional.

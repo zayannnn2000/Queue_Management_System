@@ -1,24 +1,15 @@
 // Persistence for the single shared queue state.
-// Upstash Redis when its env vars are set (Vercel Marketplace), otherwise process memory (local dev).
+// Postgres (Supabase on Vercel) when a database URL is set, otherwise process memory (local dev).
 // Writes are compare-and-set on `version`, so concurrent staff actions never overwrite each other.
+// An empty store starts with the fictional sample day.
 
 import "server-only";
-import { Redis } from "@upstash/redis";
-import { type QueueState, createState, rolloverIfNewDay, upgradeState } from "./queue";
+import postgres from "postgres";
+import { pgClearFailedAttempts, pgFailedAttempts, pgRecordFailedAttempt, readState, writeState } from "./pg-store";
+import { DEFAULT_SETTINGS, type QueueState, rolloverIfNewDay, upgradeState } from "./queue";
+import { buildSeedState } from "./seed";
 
-export type StorageKind = "redis" | "memory";
-
-const STATE_KEY = "queue:state";
-const VERSION_KEY = "queue:version";
-
-// KEYS[1]=state, KEYS[2]=version; ARGV[1]=expected version ("-1" if none), ARGV[2]=state JSON, ARGV[3]=new version
-const CAS_SCRIPT = `
-local current = redis.call('GET', KEYS[2])
-if (current or '-1') ~= ARGV[1] then return 0 end
-redis.call('SET', KEYS[1], ARGV[2])
-redis.call('SET', KEYS[2], ARGV[3])
-return 1
-`;
+export type StorageKind = "postgres" | "memory";
 
 interface Store {
   kind: StorageKind;
@@ -27,20 +18,21 @@ interface Store {
   write(next: QueueState, expected: number | null): Promise<boolean>;
 }
 
-function redisStore(redis: Redis): Store {
-  return {
-    kind: "redis",
-    read: () => redis.get<QueueState>(STATE_KEY),
-    async write(next, expected) {
-      const ok = await redis.eval(
-        CAS_SCRIPT,
-        [STATE_KEY, VERSION_KEY],
-        [String(expected ?? -1), JSON.stringify(next), String(next.version)],
-      );
-      return ok === 1;
-    },
-  };
-}
+// Supabase's pooled URL (transaction mode) needs prepare: false. Kept small: serverless instances
+// each hold their own pool. One pool per process, even though Next loads this module once per
+// server bundle. A local database (PGlite, `npm run db:local`) takes one connection.
+const url = process.env.POSTGRES_URL ?? process.env.DATABASE_URL;
+const local = url ? /@(localhost|127\.0\.0\.1)[:/]/.test(url) : false;
+const pool = globalThis as unknown as { __queueSql?: postgres.Sql };
+const sql = url
+  ? (pool.__queueSql ??= postgres(url, {
+      prepare: false,
+      max: local ? 1 : 3,
+      idle_timeout: 20,
+      ssl: local ? false : "require",
+      onnotice: () => {},
+    }))
+  : null;
 
 const memory = globalThis as unknown as { __queueState?: QueueState | null };
 
@@ -54,48 +46,44 @@ const memoryStore: Store = {
   },
 };
 
-const redisUrl = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
-const redisToken = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
-const redis = redisUrl && redisToken ? new Redis({ url: redisUrl, token: redisToken }) : null;
-
-const store = redis ? redisStore(redis) : memoryStore;
+const store: Store = sql
+  ? { kind: "postgres", read: () => readState(sql), write: (next, expected) => writeState(sql, next, expected) }
+  : memoryStore;
 export const storageKind: StorageKind = store.kind;
+
+/** The state to start from: stored (upgraded, rolled over to today), or the sample day if empty. */
+function current(stored: QueueState | null, now: number): QueueState {
+  return stored ? rolloverIfNewDay(upgradeState(stored, now), now) : buildSeedState(now, DEFAULT_SETTINGS, 1);
+}
 
 // ---- Failed PIN attempts, per client, expiring after `windowMs` ----
 
 const memoryAttempts = globalThis as unknown as { __pinAttempts?: Map<string, { count: number; until: number }> };
 
 export async function failedAttempts(client: string, now: number): Promise<number> {
-  const key = `queue:pin-fail:${client}`;
-  if (redis) return (await redis.get<number>(key)) ?? 0;
-  const entry = memoryAttempts.__pinAttempts?.get(key);
+  if (sql) return pgFailedAttempts(sql, client, now);
+  const entry = memoryAttempts.__pinAttempts?.get(client);
   return entry && entry.until > now ? entry.count : 0;
 }
 
 export async function recordFailedAttempt(client: string, now: number, windowMs: number): Promise<number> {
-  const key = `queue:pin-fail:${client}`;
-  if (redis) {
-    const count = await redis.incr(key);
-    if (count === 1) await redis.pexpire(key, windowMs);
-    return count;
-  }
+  if (sql) return pgRecordFailedAttempt(sql, client, now, windowMs);
   const map = (memoryAttempts.__pinAttempts ??= new Map());
-  const entry = map.get(key);
+  const entry = map.get(client);
   const count = entry && entry.until > now ? entry.count + 1 : 1;
-  map.set(key, { count, until: entry && entry.until > now ? entry.until : now + windowMs });
+  map.set(client, { count, until: entry && entry.until > now ? entry.until : now + windowMs });
   return count;
 }
 
 export async function clearFailedAttempts(client: string): Promise<void> {
-  const key = `queue:pin-fail:${client}`;
-  if (redis) await redis.del(key);
-  else memoryAttempts.__pinAttempts?.delete(key);
+  if (sql) return pgClearFailedAttempts(sql, client);
+  memoryAttempts.__pinAttempts?.delete(client);
 }
 
 /** Current state, rolled over to a fresh queue if the clinic-local date has changed. */
 export async function loadState(now: number): Promise<QueueState> {
   const stored = await store.read();
-  const state = stored ? rolloverIfNewDay(upgradeState(stored, now), now) : createState(now);
+  const state = current(stored, now);
   if (state !== stored) await store.write(state, stored?.version ?? null);
   return state;
 }
@@ -110,8 +98,7 @@ export async function mutate<T extends { state: QueueState }>(
 ): Promise<T> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const stored = await store.read();
-    const current = stored ? rolloverIfNewDay(upgradeState(stored, now), now) : createState(now);
-    const result = apply(current);
+    const result = apply(current(stored, now));
     if (result.state === stored) return result;
     if (await store.write(result.state, stored?.version ?? null)) return result;
   }

@@ -3,6 +3,7 @@
 import { createContext, use, useCallback, useEffect, useRef, useState, useTransition } from "react";
 import type { Action, CallRecord, QueueView } from "@/lib/queue";
 import type { StorageKind } from "@/lib/store";
+import { LIVE_POLL_MS, useQueueChanges } from "./live-updates";
 
 export const POLL_MS = 3000;
 
@@ -62,7 +63,7 @@ export function useQueue(): QueueContextValue {
   return ctx;
 }
 
-/** Holds the staff view, polls it every 3 s, and applies actions through /api/action. */
+/** Holds the staff view, refreshes it on every pushed change (else every 3 s), and applies actions through /api/action. */
 export function QueueProvider({
   initial,
   storage,
@@ -93,31 +94,34 @@ export function QueueProvider({
     return () => window.cancelAnimationFrame(frame);
   }, [printing]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const poll = async () => {
-      if (document.hidden || inFlight.current > 0) return;
-      try {
-        const res = await fetch("/api/state", { cache: "no-store" });
-        if (res.status === 401) return toSignIn();
-        if (!res.ok) throw new Error(String(res.status));
-        const data = (await res.json()) as { view: QueueView };
-        if (!cancelled && inFlight.current === 0) {
-          setView(data.view);
-          setStale(false);
-        }
-      } catch {
-        if (!cancelled) setStale(true);
+  const refresh = useCallback(async () => {
+    if (document.hidden || inFlight.current > 0) return;
+    try {
+      const res = await fetch("/api/state", { cache: "no-store" });
+      if (res.status === 401) return toSignIn();
+      if (!res.ok) throw new Error(String(res.status));
+      const data = (await res.json()) as { view: QueueView };
+      if (inFlight.current === 0) {
+        setView(data.view);
+        setStale(false);
       }
-    };
-    const id = window.setInterval(poll, POLL_MS);
-    document.addEventListener("visibilitychange", poll);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", poll);
-    };
+    } catch {
+      setStale(true);
+    }
   }, []);
+
+  // Pushed changes refresh at once; the timer keeps the time-based waits current (and is the
+  // whole mechanism when realtime isn't configured or is reconnecting).
+  const live = useQueueChanges(refresh);
+  useEffect(() => {
+    const tick = () => void refresh();
+    const id = window.setInterval(tick, live ? LIVE_POLL_MS : POLL_MS);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [live, refresh]);
 
   const run = useCallback((action: StaffAction) => {
     inFlight.current++;

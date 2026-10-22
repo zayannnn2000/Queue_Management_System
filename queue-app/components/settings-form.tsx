@@ -332,7 +332,9 @@ function SampleData() {
         <>
           <p>
             Stored in{" "}
-            {storage === "redis" ? "Upstash Redis, shared by every screen." : "this server's memory (demo mode). Restarting clears it."}
+            {storage === "postgres"
+              ? "Postgres (Supabase), shared by every screen; every day's visits are kept as history."
+              : "this server's memory (demo mode). Restarting clears it."}
           </p>
           <p className="mt-2">Tokens restart at W-001 and A-001 each day in Dhaka time.</p>
         </>

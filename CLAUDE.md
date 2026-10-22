@@ -14,6 +14,13 @@ If a build instruction conflicts with these, stop and ask.
 - All queue logic lives in `queue-app/lib/queue.ts` as **pure functions** (no I/O, no UI,
   `now` always passed in). Run Vitest after every change to it.
 - Fictional sample data only. Staff pages behind a shared staff PIN (`STAFF_PIN`).
+- **Data: Postgres on Supabase** (decided 2026-10-22). `lib/pg-store.ts` maps the state to tables
+  (`clinic`, `services`, `visits`, `calls`, `login_attempts`); every write is one transaction that
+  compare-and-sets `clinic.version`; every query runs inside a transaction (Supabase's pooler).
+  Schema changes go in a new `db/migrations/NNN_*.sql`, never by editing an applied one; deploys
+  apply them first. Row-level security on every table; the browser key may read only `clinic`.
+  Supabase Realtime pushes `clinic` updates; screens refetch through the API (never patient data
+  over the public channel). An empty database starts with the sample day.
 
 ## Queues and rooms
 

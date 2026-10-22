@@ -104,7 +104,7 @@ const callNext = svg(
     box(322, 312, 128, 48, "Earliest target", "of these", "shared"),
     box(10, 388, 290, 48, "Earliest upcoming target", "Nobody due: the room isn't left idle", "shared"),
     box(10, 464, 290, 48, "Being seen in the room", "Who was picked and why is shown", "shared"),
-    box(10, 540, 290, 48, "Recompute waits per service", "Display refreshes within 3 seconds", "shared"),
+    box(10, 540, 290, 48, "Recompute waits per service", "Saved in Postgres; screens update live", "shared"),
     arrow([[155, 50], [155, 76]]),
     arrow([[300, 100], [321, 100]]),
     label(311, 93, "Yes", "middle"),

@@ -1,40 +1,44 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { PublicRow, PublicService, PublicView } from "@/lib/queue";
 import { DEFAULT_SETTINGS } from "@/lib/queue";
 import { formatClock } from "@/lib/time";
 import { HygieiaMark } from "./brand";
+import { LIVE_POLL_MS, useQueueChanges } from "./live-updates";
 import { POLL_MS } from "./queue-provider";
 
 const ROWS_PER_PANEL = 5;
 
-/** Public waiting-room board: one panel per service queue, token and initial only. Polls every 3 s. */
+/** Public waiting-room board: one panel per service queue, token and initial only. Live, else polls every 3 s. */
 export function DisplayBoard({ initial, highlight }: { initial: PublicView; highlight: string | null }) {
   const [view, setView] = useState(initial);
   const [stale, setStale] = useState(false);
 
+  const refresh = useCallback(async () => {
+    if (document.hidden) return;
+    try {
+      const res = await fetch("/api/state?view=public", { cache: "no-store" });
+      if (!res.ok) throw new Error(String(res.status));
+      setView(((await res.json()) as { view: PublicView }).view);
+      setStale(false);
+    } catch {
+      setStale(true);
+    }
+  }, []);
+
+  const live = useQueueChanges(refresh);
   useEffect(() => {
-    const poll = async () => {
-      if (document.hidden) return;
-      try {
-        const res = await fetch("/api/state?view=public", { cache: "no-store" });
-        if (!res.ok) throw new Error(String(res.status));
-        setView(((await res.json()) as { view: PublicView }).view);
-        setStale(false);
-      } catch {
-        setStale(true);
-      }
-    };
-    const id = window.setInterval(poll, POLL_MS);
+    const tick = () => void refresh();
+    const id = window.setInterval(tick, live ? LIVE_POLL_MS : POLL_MS);
     // A phone coming back to the page refreshes at once instead of waiting for a throttled timer.
-    document.addEventListener("visibilitychange", poll);
+    document.addEventListener("visibilitychange", tick);
     return () => {
       window.clearInterval(id);
-      document.removeEventListener("visibilitychange", poll);
+      document.removeEventListener("visibilitychange", tick);
     };
-  }, []);
+  }, [live, refresh]);
 
   return (
     <div className="mx-auto flex min-h-screen max-w-[1920px] flex-col px-4 py-6 md:px-10 md:py-8">
@@ -49,7 +53,7 @@ export function DisplayBoard({ initial, highlight }: { initial: PublicView; high
           </span>
         </h1>
         <p className="num text-lg text-muted md:ml-auto">
-          {formatClock(view.now, DEFAULT_SETTINGS.timezone)} · Updated every 3 seconds
+          {formatClock(view.now, DEFAULT_SETTINGS.timezone)} · {live ? "Live" : "Updated every 3 seconds"}
           {stale ? <span className="ml-2 text-warn-ink">(reconnecting)</span> : null}
         </p>
       </header>

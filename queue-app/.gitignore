@@ -45,3 +45,6 @@ next-env.d.ts
 /playwright-report/
 .vercel
 .env*
+
+# local Postgres (npm run db:local)
+/.pglite/

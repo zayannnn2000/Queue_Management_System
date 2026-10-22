@@ -19,7 +19,8 @@ public display.
 >
 > The queue also clears itself at midnight (Dhaka time), so if the lists look empty, use one of these.
 
-- **Host:** Vercel (Next.js), shared state in Upstash Redis from the Vercel Marketplace.
+- **Host:** Vercel (Next.js, functions in Mumbai `bom1`); data in **Postgres on Supabase** (Mumbai), with
+  **Supabase Realtime** pushing every change to open screens.
 
 ## How to run
 
@@ -29,14 +30,24 @@ Requires Node.js 22+ (built on 24 LTS).
 cd queue-app
 npm install
 npm run dev          # http://localhost:3000 (redirects to /staff)
-npm test             # Vitest: queue logic (lib/queue.ts), seed data, staff PIN
+npm test             # Vitest: queue logic, seed data, staff PIN, and the Postgres store (on PGlite)
 npm run test:e2e     # Playwright: staff flows + display sync (uses installed Edge; PW_CHANNEL=chrome to switch)
 npm run build        # production build
 ```
 
-Without Redis credentials the app keeps the queue in the server's memory, which is fine for local use.
-To share state across instances, set `KV_REST_API_URL` and `KV_REST_API_TOKEN` (or the
-`UPSTASH_REDIS_REST_*` pair); on Vercel the Upstash integration sets them.
+**Data.** Without a database URL the app keeps the queue in the server's memory, which is fine for a quick look.
+For a real local Postgres without Docker:
+
+```bash
+npm run db:local     # PGlite as a Postgres server on port 5433, data in .pglite/
+DATABASE_URL=postgres://postgres@localhost:5433/postgres npm run db:migrate
+DATABASE_URL=postgres://postgres@localhost:5433/postgres npm run dev
+```
+
+On Vercel, Supabase's integration sets `POSTGRES_URL` / `POSTGRES_URL_NON_POOLING` (server) and
+`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (browser, for Realtime only). Every deploy runs
+`db/migrate.mjs` and `db/check.mjs` before building: migrations are applied, and the build fails if any table is left
+without row-level security. An empty database starts with the fictional sample day.
 
 E2E against the live site: `E2E_BASE_URL=https://queue-management-system-jet-six.vercel.app E2E_STAFF_PIN=<pin> npm run test:e2e`
 (it resets the day's data).
@@ -50,7 +61,11 @@ queue-app/
   lib/queue.ts            all queue logic: pure functions, `now` always passed in
   lib/time.ts             Asia/Dhaka day key, 5-minute slots
   lib/seed.ts             fictional sample day
-  lib/store.ts            Upstash Redis or memory, compare-and-set on version
+  lib/store.ts            Postgres or memory; read → apply → compare-and-set on version, with retries
+  lib/pg-store.ts         QueueState ↔ rows, one transaction per write
+  db/migrations/          the schema, row-level security and Realtime setup (SQL)
+  db/migrate.mjs, check   apply migrations; print and enforce the security setup
+  components/live-updates Supabase Realtime subscription (the clinic row only)
   app/api/state           GET staff view, or ?view=public (token + initial only)
   app/api/action          POST one staff action, applied atomically
   app/staff, app/display  the two screens
@@ -68,7 +83,7 @@ display stays public.
 - Set it on Vercel, then redeploy: `vercel env add STAFF_PIN production` (4–8 digits), then `vercel --prod`.
   To change it, `vercel env rm STAFF_PIN production`, add it again, and redeploy; everyone is signed out.
 - A correct PIN gives that browser a signed, httpOnly cookie for 12 hours (one shift). **Lock** signs it out.
-- 5 wrong PINs from one address lock sign-in for 5 minutes (counted in Redis on Vercel).
+- 5 wrong PINs from one address lock sign-in for 5 minutes (counted in the database).
 - Without `STAFF_PIN` (local development) the front desk is open.
 - Optional `AUTH_SECRET`: any long random string, mixed into the cookie signature.
 - Testing with a PIN: run a server with `STAFF_PIN=<test pin>`, then
@@ -131,7 +146,7 @@ Open https://queue-management-system-jet-six.vercel.app/display in a second wind
 
 | # | Do this | You should see |
 |---|---|---|
-| 1 | Add a walk-in: name "Rina", General consultation, **Add walk-in**. | Token **CW-001**, place 1, *Due now*. The display's General consultation panel shows **CW-001 R.** within 3 seconds. |
+| 1 | Add a walk-in: name "Rina", General consultation, **Add walk-in**. | Token **CW-001**, place 1, *Due now*. The display's General consultation panel shows **CW-001 R.** within about a second (the display header says *Live*). |
 | 2 | Click **Print token**, then scan the slip's QR code with a phone. | An 80 mm slip with CW-001, the service, Room 1, place, wait and a QR code, and no name. The QR opens the display with CW-001 highlighted. |
 | 3 | Add a walk-in "Karim", **Blood test**. | **BW-001**, place 1 in the Blood test queue, *Due now*: a separate queue with its own room. |
 | 4 | Choose **Appointment**, "Sadia", General consultation, a time 30+ min ahead, **Book appointment**. Then book "Omar", **Blood test**, the **same time**. | CA-001 and BA-001 both booked: services share times. A second consultation at that time is refused ("full for General consultation"). |
@@ -143,7 +158,7 @@ Open https://queue-management-system-jet-six.vercel.app/display in a second wind
 | 10 | Settings → *Services and departments*: add "Dental" (letter D). | Dental appears in Add patient, Rooms, the timeline and the display; a walk-in gets DW-001. |
 | 11 | Click **Lock** in the sidebar. | The PIN screen appears; the display window keeps working. |
 
-Automated: `npm test` (52 unit tests) and `npm run test:e2e` (7 browser tests) from `queue-app/`. See [Tests](#tests).
+Automated: `npm test` (58 unit and database tests) and `npm run test:e2e` (7 browser tests) from `queue-app/`. See [Tests](#tests).
 
 ## Ordering rule (per service queue)
 
@@ -180,7 +195,8 @@ already in the room.
   *same* call-next rule at `t`. That patient starts at `t`; the room is next free at `t + expected`.
   `wait = start − now`, and **position** is the order within that service's queue.
 - **Shown as** "Due now" when ≤ 2 min, otherwise "~X min" rounded **up** to the next 5.
-- Recomputed on every change and every 3-second poll. The "Next hour" timeline draws the same projection.
+- Recomputed on every change (pushed through Realtime) and on a timer (every 15 s while live, 3 s without
+  Realtime), so waits keep counting down. The "Next hour" timeline draws the same projection.
 
 ## Assumptions
 
@@ -209,18 +225,28 @@ already in the room.
   due. Keeping rooms working was judged worth it; the estimate accounts for it.
 - **The overlap check is conservative:** with 2+ rooms it can refuse a slot where the real peak would just fit.
 - **Estimates, not promises.** They improve as real visit times accumulate.
-- **Polling, not push.** Screens refresh every 3 s: simple and robust on serverless, at the cost of up to 3 s of lag.
+- **Push a nudge, not the data.** Realtime only tells screens *that* the queue changed (the clinic row's version);
+  they refetch through their own API. Patient data never goes over the public channel, at the cost of one extra
+  request per change. If Realtime drops, screens fall back to polling every 3 s.
+- **The rules stay in TypeScript, the database enforces the invariants.** `lib/queue.ts` decides; Postgres guarantees
+  one token per day, one active service per letter, and one patient per room, and every write is a version-checked
+  transaction. Each staff action rewrites today's rows (a few hundred at most): simple and safe at clinic scale.
 
 ## Limitations
 
 - Staff sign-in is one shared PIN, not individual accounts: there is no record of *who* pressed a button.
 - One clinic per deployment (no multi-branch support). A service can't be renamed or re-lettered once added (remove and add it).
-- Without Redis (local dev) the queue lives in one server process's memory and is lost on restart.
+- Without a database (quick local runs) the queue lives in one server process's memory and is lost on restart.
+- History is stored (every day's visits and calls) but there are no reports on it yet.
 - Times are server times; there is no offline mode.
 
 ## Tests
 
-- **Vitest** (`queue-app/tests`, 52 tests): tokens per service; separate queues and rooms; FIFO; an appointment due before an earlier
+- **Postgres store** (`tests/pg-store.test.ts`, 6 tests on PGlite, a real Postgres in-process, with the same migrations and
+  client as production): the sample day round-trips exactly; a stale write is refused; serve & call next, priority, holds and the
+  call history are stored; a removed service is archived with its history kept; Reset day clears the day; the database itself
+  refuses two patients in one room; the PIN counter.
+- **Vitest** (`queue-app/tests`, 52 more tests): tokens per service; separate queues and rooms; FIFO; an appointment due before an earlier
   walk-in; early appointments waiting; walk-in protection; late conversion and the grace boundary; ties; two rooms; priority and
   Call now; the 15-minute walk-in hold (including the cases where it doesn't apply); booking clashes within a service only, edits and
   overdue; adding and removing services; the clamped last-5 average and overrun floor; the documentation's worked example; daily reset;

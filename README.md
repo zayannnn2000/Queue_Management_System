@@ -5,10 +5,10 @@ tokens; every patient joins the **queue of their service** (consultation, follow
 own room(s). Staff add patients, call the next one per room and see estimated waits; patients follow their place on a
 public display.
 
-- **Live app:** https://queue-management-system-jet-six.vercel.app
-  - Staff console: [`/staff`](https://queue-management-system-jet-six.vercel.app/staff) (demo staff PIN `12345`) ·
-    settings: [`/staff/settings`](https://queue-management-system-jet-six.vercel.app/staff/settings)
-  - Waiting-room display: [`/display`](https://queue-management-system-jet-six.vercel.app/display),
+- **Live app:** https://qms.zayanblehhhh.space (also at https://queue-management-system-jet-six.vercel.app)
+  - Staff console: [`/staff`](https://qms.zayanblehhhh.space/staff) (demo staff PIN `12345`) ·
+    settings: [`/staff/settings`](https://qms.zayanblehhhh.space/staff/settings)
+  - Waiting-room display: [`/display`](https://qms.zayanblehhhh.space/display),
     with `?token=CW-004` to highlight one patient
 
 > **Before you start:** sign in to the staff console with PIN `12345`, then open **Settings** (left sidebar):
@@ -49,7 +49,7 @@ On Vercel, Supabase's integration sets `POSTGRES_URL` / `POSTGRES_URL_NON_POOLIN
 `db/migrate.mjs` and `db/check.mjs` before building: migrations are applied, and the build fails if any table is left
 without row-level security. An empty database starts with the fictional sample day.
 
-E2E against the live site: `E2E_BASE_URL=https://queue-management-system-jet-six.vercel.app E2E_STAFF_PIN=<pin> npm run test:e2e`
+E2E against the live site: `E2E_BASE_URL=https://qms.zayanblehhhh.space E2E_STAFF_PIN=<pin> npm run test:e2e`
 (it resets the day's data).
 
 ## Layout
@@ -140,8 +140,8 @@ plus appendices on the Claude Code skills used and how to test. Rebuild it with 
 
 ## How to test the platform
 
-Open the front desk at https://queue-management-system-jet-six.vercel.app/staff and sign in with the demo PIN `12345`.
-Open https://queue-management-system-jet-six.vercel.app/display in a second window, side by side. In **Settings**, click
+Open the front desk at https://qms.zayanblehhhh.space/staff and sign in with the demo PIN `12345`.
+Open https://qms.zayanblehhhh.space/display in a second window, side by side. In **Settings**, click
 **Reset day** to start from an empty queue (or **Load sample day** for a busy morning). All names are fictional.
 
 | # | Do this | You should see |

@@ -128,7 +128,7 @@ function figures() {
   });
 }
 
-const LIVE = "https://queue-management-system-jet-six.vercel.app";
+const LIVE = "https://qms.zayanblehhhh.space";
 const REPO = "https://github.com/zayannnn2000/Queue_Management_System";
 
 const content = [

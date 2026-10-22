@@ -257,7 +257,7 @@ const content = [
     ],
   ),
   p("", { spacing: { after: 40 } }),
-  p("**Automated tests** (from the `queue-app` folder): `npm test` runs 58 tests of the queue rules, sign-in, seed data and the Postgres store (on PGlite, a real Postgres in-process); `npm run test:e2e` runs 7 browser tests (staff flow, separate queues and priority, printing, booking per service, adding a service, display sync), plus PIN sign-in when E2E_STAFF_PIN is set."),
+  p("**Automated tests** (from the `queue-app` folder): `npm test` runs 59 tests of the queue rules, sign-in, seed data and the Postgres store (on PGlite, a real Postgres in-process); `npm run test:e2e` runs 7 browser tests (staff flow, separate queues and priority, printing, booking per service, adding a service, display sync), plus PIN sign-in when E2E_STAFF_PIN is set."),
 ];
 
 const doc = new Document({

@@ -19,9 +19,8 @@ public display.
 >
 > The queue also clears itself at midnight (Dhaka time), so if the lists look empty, use one of these.
 
-- **Host:** Vercel (Next.js, functions in Singapore `sin1`); data in **Postgres on Supabase** (Singapore,
-  `ap-southeast-1`; functions and database must share a region: each database round trip crosses it), with
-  **Supabase Realtime** pushing every change to open screens.
+- **Host:** Vercel (Next.js, functions in Singapore `sin1`) with data in **Postgres on Supabase** in the same region
+  (`ap-southeast-1`), and **Supabase Realtime** pushing every change to open screens.
 
 ## How to run
 
@@ -159,7 +158,7 @@ Open https://queue-management-system-jet-six.vercel.app/display in a second wind
 | 10 | Settings → *Services and departments*: add "Dental" (letter D). | Dental appears in Add patient, Rooms, the timeline and the display; a walk-in gets DW-001. |
 | 11 | Click **Lock** in the sidebar. | The PIN screen appears; the display window keeps working. |
 
-Automated: `npm test` (58 unit and database tests) and `npm run test:e2e` (7 browser tests) from `queue-app/`. See [Tests](#tests).
+Automated: `npm test` (59 unit and database tests) and `npm run test:e2e` (7 browser tests) from `queue-app/`. See [Tests](#tests).
 
 ## Ordering rule (per service queue)
 
@@ -245,10 +244,11 @@ already in the room.
 
 ## Tests
 
-- **Postgres store** (`tests/pg-store.test.ts`, 6 tests on PGlite, a real Postgres in-process, with the same migrations and
+- **Postgres store** (`tests/pg-store.test.ts`, 7 tests on PGlite, a real Postgres in-process, with the same migrations and
   client as production): the sample day round-trips exactly; a stale write is refused; serve & call next, priority, holds and the
-  call history are stored; a removed service is archived with its history kept; Reset day clears the day; the database itself
-  refuses two patients in one room; the PIN counter.
+  call history are stored; a removed service is archived with its history kept; Reset day clears the day; a read is one
+  statement and a write sends only what changed, matching a full rewrite; the database itself refuses two patients in one room;
+  the PIN counter.
 - **Vitest** (`queue-app/tests`, 52 more tests): tokens per service; separate queues and rooms; FIFO; an appointment due before an earlier
   walk-in; early appointments waiting; walk-in protection; late conversion and the grace boundary; ties; two rooms; priority and
   Call now; the 15-minute walk-in hold (including the cases where it doesn't apply); booking clashes within a service only, edits and

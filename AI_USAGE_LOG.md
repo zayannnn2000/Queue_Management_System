@@ -233,6 +233,19 @@ proposed and what was corrected. Model: Claude (Opus) in Claude Code. Dates: 21 
   7/7 E2E against a production build on Postgres; a walk-in reached the open display 0.8 s after it was saved;
   REST calls with the public key confirmed it reads only the clinic row and can't change anything.
 
+## 20. Faster database reads
+- **Prompt:** look into the ~0.6 s page reads and speed them up, locally first.
+- **Measured first:** curl's timing split showed the network was not the cause (a static file answers in 0.07 s after
+  the connection is set up) and that the server spent about 0.5 s per read, with the function already in Mumbai next
+  to the database.
+- **Changes:** a read is now one SQL statement returning the whole state as JSON (it was 6 round trips); a write
+  touches only what changed since the state it was computed from (adding a walk-in: 5 statements in all, from about
+  14); both API routes send a `Server-Timing` header so the production cost can be read in dev tools.
+- **Tested by:** a new store test counts the statements sent and checks the diff-only write leaves the database
+  exactly as a full rewrite would; 59/59 Vitest; 7/7 E2E on a production build against local Postgres.
+- **Not yet known:** the production gain. Claude can't reach the production database from here (its password is a
+  Vercel secret), so the Server-Timing numbers after the next deploy are the real measurement.
+
 ## Things Claude did not do (by design)
 - It did not enter credentials. GitHub and Vercel sign-ins and the Upstash terms were completed by me.
 - It did not invent customers, reviews or statistics. All names are fictional.

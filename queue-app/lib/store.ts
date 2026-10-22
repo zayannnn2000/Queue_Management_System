@@ -14,8 +14,11 @@ export type StorageKind = "postgres" | "memory";
 interface Store {
   kind: StorageKind;
   read(): Promise<QueueState | null>;
-  /** Writes `next` only if the stored version is still `expected` (null = nothing stored). */
-  write(next: QueueState, expected: number | null): Promise<boolean>;
+  /**
+   * Writes `next` only if the stored version is still `expected` (null = nothing stored).
+   * `prev` is the stored state it was computed from, so only the difference needs writing.
+   */
+  write(next: QueueState, expected: number | null, prev: QueueState | null): Promise<boolean>;
 }
 
 // Supabase's pooled URL (transaction mode) needs prepare: false. Kept small: serverless instances
@@ -47,7 +50,7 @@ const memoryStore: Store = {
 };
 
 const store: Store = sql
-  ? { kind: "postgres", read: () => readState(sql), write: (next, expected) => writeState(sql, next, expected) }
+  ? { kind: "postgres", read: () => readState(sql), write: (next, expected, prev) => writeState(sql, next, expected, prev) }
   : memoryStore;
 export const storageKind: StorageKind = store.kind;
 
@@ -84,7 +87,7 @@ export async function clearFailedAttempts(client: string): Promise<void> {
 export async function loadState(now: number): Promise<QueueState> {
   const stored = await store.read();
   const state = current(stored, now);
-  if (state !== stored) await store.write(state, stored?.version ?? null);
+  if (state !== stored) await store.write(state, stored?.version ?? null, stored);
   return state;
 }
 
@@ -100,7 +103,7 @@ export async function mutate<T extends { state: QueueState }>(
     const stored = await store.read();
     const result = apply(current(stored, now));
     if (result.state === stored) return result;
-    if (await store.write(result.state, stored?.version ?? null)) return result;
+    if (await store.write(result.state, stored?.version ?? null, stored)) return result;
   }
   throw new Error("The queue is busy. Please try again.");
 }

@@ -15,8 +15,10 @@ If a build instruction conflicts with these, stop and ask.
   `now` always passed in). Run Vitest after every change to it.
 - Fictional sample data only. Staff pages behind a shared staff PIN (`STAFF_PIN`).
 - **Data: Postgres on Supabase** (decided 2026-10-22). `lib/pg-store.ts` maps the state to tables
-  (`clinic`, `services`, `visits`, `calls`, `login_attempts`); every write is one transaction that
-  compare-and-sets `clinic.version`; every query runs inside a transaction (Supabase's pooler).
+  (`clinic`, `services`, `visits`, `calls`, `login_attempts`). A read is one statement (simple
+  protocol, no parameters). Every write is one transaction that compare-and-sets `clinic.version`
+  and writes only what changed since the state it was computed from. Parameterised queries only
+  ever run inside a transaction (they can hang in Supabase's transaction pooler otherwise).
   Schema changes go in a new `db/migrations/NNN_*.sql`, never by editing an applied one; deploys
   apply them first. Row-level security on every table; the browser key may read only `clinic`.
   Supabase Realtime pushes `clinic` updates; screens refetch through the API (never patient data

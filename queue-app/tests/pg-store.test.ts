@@ -14,12 +14,19 @@ const PORT = 54329;
 let db: PGlite;
 let server: PGLiteSocketServer;
 let sql: postgres.Sql;
+/** Statements sent to the database (BEGIN and COMMIT included), for counting round trips. */
+let statements: string[] = [];
 
 beforeAll(async () => {
   db = await PGlite.create();
   server = new PGLiteSocketServer({ db, port: PORT, host: "127.0.0.1" });
   await server.start();
-  sql = postgres(`postgres://postgres@127.0.0.1:${PORT}/postgres`, { prepare: false, max: 1, onnotice: () => {} });
+  sql = postgres(`postgres://postgres@127.0.0.1:${PORT}/postgres`, {
+    prepare: false,
+    max: 1,
+    onnotice: () => {},
+    debug: (_connection, query) => statements.push(query.trim().split(/\s+/)[0].toLowerCase()),
+  });
   await migrate(sql);
 });
 
@@ -29,11 +36,11 @@ afterAll(async () => {
   await db?.close();
 });
 
-/** Apply an action and store it, as the API route does. */
+/** Apply an action and store only the difference, as the API route does. */
 async function act(action: Action, at: number): Promise<QueueState> {
   const stored = (await readState(sql))!;
   const next = applyAction(stored, action, at).state;
-  expect(await writeState(sql, next, stored.version)).toBe(true);
+  expect(await writeState(sql, next, stored.version, stored)).toBe(true);
   return next;
 }
 
@@ -83,6 +90,29 @@ describe("Postgres store", () => {
     expect((await readState(sql))!).toEqual(s);
     expect(await sql`select 1 from visits`).toHaveLength(0);
     expect(await sql`select 1 from calls`).toHaveLength(0);
+  });
+
+  it("reads in one statement and writes only what changed, matching a full rewrite", async () => {
+    // Start from a fresh sample day (as "Load sample day" does).
+    const stored = (await readState(sql))!;
+    const reseeded = buildSeedState(now, stored.settings, stored.version + 1);
+    expect(await writeState(sql, reseeded, stored.version, stored)).toBe(true);
+
+    statements = [];
+    await readState(sql);
+    expect(statements).toEqual(["with"]); // the whole state in one round trip
+
+    statements = [];
+    const s = await act({ type: "addWalkIn", name: "Nadia Islam", service: "blood_test" }, now + 8000);
+    // read; then begin, claim the version, insert the one new visit, commit
+    expect(statements).toEqual(["with", "begin", "update", "insert", "commit"]);
+
+    // A full rewrite of the same state leaves the database exactly as the diff did.
+    const viaDiff = await readState(sql);
+    expect(viaDiff).toEqual(s);
+    const full = { ...s, version: s.version + 1 };
+    expect(await writeState(sql, full, s.version, null)).toBe(true);
+    expect({ ...(await readState(sql))!, version: s.version }).toEqual(viaDiff);
   });
 
   it("lets the database refuse two patients being seen in one room", async () => {

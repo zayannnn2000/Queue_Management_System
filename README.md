@@ -230,7 +230,9 @@ already in the room.
   request per change. If Realtime drops, screens fall back to polling every 3 s.
 - **The rules stay in TypeScript, the database enforces the invariants.** `lib/queue.ts` decides; Postgres guarantees
   one token per day, one active service per letter, and one patient per room, and every write is a version-checked
-  transaction. Each staff action rewrites today's rows (a few hundred at most): simple and safe at clinic scale.
+  transaction. Round trips are kept low: a read is one SQL statement returning the whole state, and a write touches
+  only the rows that changed (adding a walk-in is 5 statements in all). Both API routes send a `Server-Timing`
+  header (`db`, `view`) so the cost can be checked in the browser's dev tools.
 
 ## Limitations
 
